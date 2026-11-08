@@ -8,7 +8,7 @@
 [ext_resource type="Script" uid="uid://n7ycn4pq5xri" path="res://demo/orbit_camera.gd" id="6_camera"]
 [ext_resource type="Shader" uid="uid://dywy6cs808401" path="res://demo/shaders/ground.gdshader" id="7_ground"]
 [ext_resource type="Script" uid="uid://byw8ou1et0tjo" path="res://fog/fog_interactor.gd" id="8_interactor"]
-[ext_resource type="PackedScene" path="res://demo/hud.tscn" id="9_hud"]
+[ext_resource type="PackedScene" uid="uid://qoom3gyhd6xw" path="res://demo/hud.tscn" id="9_hud"]
 [ext_resource type="Script" uid="uid://ci0th8joh5ei6" path="res://fog/fog_settings.gd" id="9_kbqbn"]
 
 [sub_resource type="Environment" id="Environment_demo"]
@@ -83,16 +83,23 @@ ring_segments = 6
 [sub_resource type="Resource" id="Resource_kbqbn"]
 resource_local_to_scene = true
 script = ExtResource("9_kbqbn")
-resolution = 512
-simulation_hz = 60.0
+resolution = 2048
 recovery_half_life = 12.0
-max_density = 2.0
-thickness = 2.0
+thickness = 0.25
 density = 5.0
+height_falloff = 0.2
+edge_fade = 0.05
+obstacle_fade = 0.02
 detail_amount = 0.0
 
 [node name="InteractiveFogDemo" type="Node3D" unique_id=819685183]
 script = ExtResource("1_controller")
+brush_radius = 0.7
+brush_click_clearing = 8.0
+brush_click_speed = 0.0
+brush_compression_width = 2.0
+burst_radius = 8.0
+burst_speed = 12.0
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=834132990]
 environment = SubResource("Environment_demo")

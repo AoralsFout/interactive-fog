@@ -4,6 +4,35 @@ extends CanvasLayer
 ## 这些滑块修改本次运行的资源；长期预设请在编辑器的 FogSettings 中保存。
 
 @export_node_path("Node3D") var fog_field_path := NodePath("../FogField")
+@export_group("场图")
+## 地图宽度；高度按雾场的 XZ 长宽比自动计算，避免把方向或障碍形状拉歪。
+@export_range(240.0, 640.0, 10.0, "suffix:px") var field_map_width := 360.0:
+	set(value):
+		field_map_width = clampf(value, 240.0, 640.0)
+		_sync_field_map_style()
+## 箭头采样间隔，单位为面板像素；越小越密集，不影响模拟本身。
+@export_range(4.0, 64.0, 1.0, "suffix:px") var arrow_spacing := 26.0:
+	set(value):
+		arrow_spacing = clampf(value, 4.0, 64.0)
+		_sync_field_map_style()
+## 满长度箭头代表的速度。超过此值时保持满长度，图例会显示这个限幅值。
+@export_range(0.1, 10.0, 0.1, "suffix:m/s") var arrow_reference_speed := 2.0:
+	set(value):
+		arrow_reference_speed = maxf(value, 0.1)
+		_sync_field_map_style()
+## 低于此速度不绘制箭头，避免在停滞区域出现方向随机的小点。
+@export_range(0.0, 0.5, 0.01, "suffix:m/s") var arrow_min_speed := 0.04:
+	set(value):
+		arrow_min_speed = maxf(value, 0.0)
+		_sync_field_map_style()
+@export_range(0.0, 3.0, 0.1, "suffix:px") var arrow_line_width := 1.2:
+	set(value):
+		arrow_line_width = clampf(value, 0.0, 3.0)
+		_sync_field_map_style()
+@export var arrow_color := Color(0.96, 0.98, 0.95):
+	set(value):
+		arrow_color = value
+		_sync_field_map_style()
 
 @onready var _field := get_node(fog_field_path) as InteractiveFogField
 @onready var _debug_map: TextureRect = %DebugMap
@@ -24,8 +53,10 @@ func _ready() -> void:
 	%PauseButton.toggled.connect(_set_paused)
 	%DebugButton.toggled.connect(_set_debug_visible)
 	%DebugMode.item_selected.connect(_set_debug_mode)
+	_debug_map.resized.connect(_sync_field_map_style)
 	_sync_controls()
 	_bind_debug_textures()
+	_set_debug_mode(%DebugMode.selected)
 
 
 func _process(delta: float) -> void:
@@ -64,6 +95,7 @@ func _sync_controls() -> void:
 	%RecoveryValue.text = "%.1f s" % settings.recovery_half_life
 	%WindValue.text = "%.2f m/s" % settings.wind_velocity.length()
 	%HeightValue.text = "%.2f m" % settings.thickness
+	_sync_field_map_style()
 
 
 func _connect_settings() -> void:
@@ -104,4 +136,36 @@ func _set_debug_visible(enabled: bool) -> void:
 
 
 func _set_debug_mode(index: int) -> void:
-	_debug_material.set_shader_parameter("mode", index)
+	# 选择框排序与 Shader 的模式编号分别维护；用 item id 保持旧模式兼容。
+	_debug_material.set_shader_parameter("mode", %DebugMode.get_item_id(index))
+	_sync_field_map_style()
+
+
+func _sync_field_map_style() -> void:
+	# Inspector setter 也会在反序列化期间调用，此时 @onready 节点还没有解析。
+	if not is_node_ready() or _field.settings == null:
+		return
+	var area := _field.settings.area_size
+	var aspect := area.x / area.y
+	%MapAspect.ratio = aspect
+	%MapAspect.custom_minimum_size = Vector2(field_map_width, field_map_width / aspect)
+	%DebugPanel.offset_left = %DebugPanel.offset_right - field_map_width - 40.0
+	var values := {
+		"map_pixel_size": _debug_map.size.max(Vector2.ONE), "area_size": area,
+		"arrow_spacing": arrow_spacing, "arrow_reference_speed": arrow_reference_speed,
+		"arrow_min_speed": arrow_min_speed, "arrow_line_width": arrow_line_width,
+		"arrow_color": arrow_color,
+	}
+	for key in values:
+		_debug_material.set_shader_parameter(key, values[key])
+	%Axes.text = "World X →    World Z ↓    %.0f × %.0f m" % [area.x, area.y]
+	var mode: int = %DebugMode.get_item_id(%DebugMode.selected)
+	%ArrowLegend.visible = mode == 3
+	%ArrowLegend.text = "Arrows: velocity · full length ≥ %.1f m/s" % arrow_reference_speed
+	match mode:
+		0, 3:
+			%FieldLegend.text = "Density: 0 dark · 1 cyan · >1 amber"
+		1:
+			%FieldLegend.text = "Velocity: red +X · green +Z · blue speed"
+		2:
+			%FieldLegend.text = "Distance: bands every 0.5 m"
