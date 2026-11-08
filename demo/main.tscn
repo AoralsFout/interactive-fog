@@ -1,0 +1,210 @@
+[gd_scene format=3 uid="uid://slprkmkyic35"]
+
+[ext_resource type="Script" uid="uid://che6xgmbd8itg" path="res://demo/demo_controller.gd" id="1_controller"]
+[ext_resource type="PackedScene" path="res://fog/scenes/fog_field.tscn" id="2_fog"]
+[ext_resource type="PackedScene" path="res://demo/player.tscn" id="3_player"]
+[ext_resource type="PackedScene" path="res://demo/obstacles/pillar_obstacle.tscn" id="4_pillar"]
+[ext_resource type="PackedScene" path="res://demo/obstacles/box_obstacle.tscn" id="5_box"]
+[ext_resource type="Script" uid="uid://n7ycn4pq5xri" path="res://demo/orbit_camera.gd" id="6_camera"]
+[ext_resource type="Shader" uid="uid://dywy6cs808401" path="res://demo/shaders/ground.gdshader" id="7_ground"]
+[ext_resource type="Script" uid="uid://byw8ou1et0tjo" path="res://fog/fog_interactor.gd" id="8_interactor"]
+[ext_resource type="PackedScene" path="res://demo/hud.tscn" id="9_hud"]
+[ext_resource type="Script" uid="uid://ci0th8joh5ei6" path="res://fog/fog_settings.gd" id="9_kbqbn"]
+
+[sub_resource type="Environment" id="Environment_demo"]
+background_mode = 1
+background_color = Color(0.025, 0.04, 0.06, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.43, 0.56, 0.66, 1)
+ambient_light_energy = 0.55
+reflected_light_source = 2
+tonemap_mode = 2
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.0
+volumetric_fog_albedo = Color(0.78, 0.87, 0.94, 1)
+volumetric_fog_gi_inject = 0.0
+volumetric_fog_length = 45.0
+volumetric_fog_ambient_inject = 0.35
+volumetric_fog_temporal_reprojection_amount = 0.5
+
+[sub_resource type="StandardMaterial3D" id="Material_platform"]
+albedo_color = Color(0.025, 0.04, 0.05, 1)
+metallic = 0.3
+roughness = 0.7
+
+[sub_resource type="BoxMesh" id="Mesh_platform"]
+size = Vector3(26, 0.3, 22)
+
+[sub_resource type="ShaderMaterial" id="Material_ground"]
+render_priority = 0
+shader = ExtResource("7_ground")
+shader_parameter/ground_color = Color(0.055, 0.08, 0.105, 1)
+shader_parameter/grid_color = Color(0.095, 0.15, 0.18, 1)
+shader_parameter/grid_size = 1.0
+
+[sub_resource type="PlaneMesh" id="Mesh_ground"]
+size = Vector2(26, 22)
+
+[sub_resource type="BoxShape3D" id="Shape_ground"]
+size = Vector3(26, 0.3, 22)
+
+[sub_resource type="StandardMaterial3D" id="Material_cool"]
+shading_mode = 0
+albedo_color = Color(0.2, 0.68, 1, 1)
+
+[sub_resource type="SphereMesh" id="Mesh_lamp"]
+radius = 0.18
+height = 0.36
+
+[sub_resource type="StandardMaterial3D" id="Material_stem"]
+albedo_color = Color(0.12, 0.18, 0.21, 1)
+metallic = 0.7
+
+[sub_resource type="CylinderMesh" id="Mesh_lamp_stem"]
+top_radius = 0.045
+bottom_radius = 0.045
+height = 2.1
+
+[sub_resource type="StandardMaterial3D" id="Material_warm"]
+shading_mode = 0
+albedo_color = Color(1, 0.51, 0.2, 1)
+
+[sub_resource type="StandardMaterial3D" id="Material_brush"]
+no_depth_test = true
+shading_mode = 0
+albedo_color = Color(0.44, 0.85, 0.78, 1)
+
+[sub_resource type="TorusMesh" id="Mesh_brush"]
+inner_radius = 0.98
+rings = 48
+ring_segments = 6
+
+[sub_resource type="Resource" id="Resource_iscmt"]
+resource_local_to_scene = true
+script = ExtResource("9_kbqbn")
+resolution = 512
+simulation_hz = 60.0
+
+[node name="InteractiveFogDemo" type="Node3D" unique_id=819685183]
+script = ExtResource("1_controller")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=834132990]
+environment = SubResource("Environment_demo")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=901404641]
+transform = Transform3D(0.81915206, 0.46984634, -0.32898995, 0, 0.57357645, 0.81915206, 0.57357645, -0.6710101, 0.46984634, 0, 0, 0)
+light_color = Color(0.68, 0.8, 0.92, 1)
+shadow_enabled = true
+directional_shadow_max_distance = 45.0
+
+[node name="Ground" type="StaticBody3D" parent="." unique_id=1111834795]
+
+[node name="Platform" type="MeshInstance3D" parent="Ground" unique_id=1132135122]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.16, 0)
+material_override = SubResource("Material_platform")
+mesh = SubResource("Mesh_platform")
+
+[node name="Surface" type="MeshInstance3D" parent="Ground" unique_id=866254994]
+material_override = SubResource("Material_ground")
+mesh = SubResource("Mesh_ground")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground" unique_id=1381013501]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.16, 0)
+shape = SubResource("Shape_ground")
+
+[node name="Obstacles" type="Node3D" parent="." unique_id=1954176331]
+
+[node name="PillarWest" parent="Obstacles" unique_id=1334920454 instance=ExtResource("4_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, -1.5)
+
+[node name="PillarNorth" parent="Obstacles" unique_id=324554054 instance=ExtResource("4_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -4)
+radius = 1.0
+height = 3.0
+
+[node name="PillarEast" parent="Obstacles" unique_id=833773814 instance=ExtResource("4_pillar")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.7, 0, 1.4)
+radius = 0.65
+height = 2.2
+
+[node name="WallWest" parent="Obstacles" unique_id=1074788304 instance=ExtResource("5_box")]
+transform = Transform3D(0.95105654, 0, -0.309017, 0, 1, 0, 0.309017, 0, 0.95105654, -4, 0, 3.5)
+box_size = Vector2(4.2, 0.65)
+height = 1.65
+
+[node name="WallEast" parent="Obstacles" unique_id=472189793 instance=ExtResource("5_box")]
+transform = Transform3D(0.8660254, 0, 0.5, 0, 1, 0, -0.5, 0, 0.8660254, 4, 0, -3.7)
+box_size = Vector2(3.2, 0.8)
+height = 2.0
+
+[node name="Lighting" type="Node3D" parent="." unique_id=673796575]
+
+[node name="WarmSpot" type="SpotLight3D" parent="Lighting" unique_id=1828608339]
+transform = Transform3D(0.66913056, 0.5935019, -0.44723576, 0, 0.60181504, 0.79863554, 0.74314487, -0.53439146, 0.40269285, -7, 3.6, 3)
+light_color = Color(1, 0.55, 0.27, 1)
+light_energy = 7.0
+light_volumetric_fog_energy = 2.0
+shadow_enabled = true
+spot_range = 17.0
+spot_attenuation = 0.7
+spot_angle = 42.0
+
+[node name="CoolOmni" type="OmniLight3D" parent="Lighting" unique_id=1487405002]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.5, 2.1, 3.2)
+light_color = Color(0.24, 0.63, 1, 1)
+light_energy = 5.0
+light_volumetric_fog_energy = 1.5
+shadow_enabled = true
+omni_range = 9.0
+
+[node name="Bulb" type="MeshInstance3D" parent="Lighting/CoolOmni" unique_id=734657186]
+material_override = SubResource("Material_cool")
+mesh = SubResource("Mesh_lamp")
+
+[node name="Stem" type="MeshInstance3D" parent="Lighting/CoolOmni" unique_id=1831034261]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.05, 0)
+material_override = SubResource("Material_stem")
+mesh = SubResource("Mesh_lamp_stem")
+
+[node name="WarmBulb" type="MeshInstance3D" parent="Lighting" unique_id=277898265]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 3.6, 3)
+material_override = SubResource("Material_warm")
+mesh = SubResource("Mesh_lamp")
+
+[node name="CameraRig" type="Node3D" parent="." unique_id=1887993958]
+script = ExtResource("6_camera")
+pitch_degrees = 45.0
+target_offset = Vector3(-2.6, 0.2, 0)
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig" unique_id=235014063]
+transform = Transform3D(0.9612617, -0.19490507, 0.19490504, 0, 0.7071067, 0.7071068, -0.2756374, -0.6797147, 0.6797146, 3.0522466, 20.706097, 19.711725)
+current = true
+fov = 55.0
+near = 0.15
+far = 80.0
+
+[node name="Player" parent="." unique_id=1001199344 instance=ExtResource("3_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4)
+camera_path = NodePath("../CameraRig/Camera3D")
+
+[node name="MouseBrush" type="Node3D" parent="." unique_id=169681079]
+
+[node name="Ring" type="MeshInstance3D" parent="MouseBrush" unique_id=2079029217]
+material_override = SubResource("Material_brush")
+cast_shadow = 0
+mesh = SubResource("Mesh_brush")
+
+[node name="FogInteractor" type="Node3D" parent="MouseBrush" unique_id=817296553]
+script = ExtResource("8_interactor")
+enabled = false
+radius = 1.4
+clearing_rate = 8.0
+directional_strength = 4.0
+radial_strength = 3.0
+swirl_strength = 2.0
+emit_when_stationary = true
+
+[node name="FogField" parent="." unique_id=1853580114 instance=ExtResource("2_fog")]
+settings = SubResource("Resource_iscmt")
+
+[node name="HUD" parent="." unique_id=842371717 instance=ExtResource("9_hud")]

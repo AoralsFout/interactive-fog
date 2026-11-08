@@ -1,0 +1,13 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://dh3tmtydonv4e"
+path="res://.godot/imported/build_obstacles.glsl-231a5a04f4f780f983146ccc75ea99e8.res"
+
+[deps]
+
+source_file="res://fog/shaders/build_obstacles.glsl"
+dest_files=["res://.godot/imported/build_obstacles.glsl-231a5a04f4f780f983146ccc75ea99e8.res"]
+
+[params]

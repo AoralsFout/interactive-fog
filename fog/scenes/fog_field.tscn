@@ -1,0 +1,31 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://fog/fog_field.gd" id="1_field"]
+[ext_resource type="Shader" path="res://fog/shaders/ground_fog.gdshader" id="2_shader"]
+[ext_resource type="Resource" path="res://fog/presets/default_fog.tres" id="3_settings"]
+
+[sub_resource type="FastNoiseLite" id="Noise_detail"]
+seed = 173
+frequency = 0.08
+fractal_octaves = 3
+
+[sub_resource type="NoiseTexture3D" id="Texture_detail"]
+width = 32
+height = 32
+depth = 32
+seamless = true
+noise = SubResource("Noise_detail")
+
+[sub_resource type="ShaderMaterial" id="Material_fog"]
+resource_local_to_scene = true
+shader = ExtResource("2_shader")
+shader_parameter/detail_texture = SubResource("Texture_detail")
+
+[node name="FogField" type="Node3D"]
+script = ExtResource("1_field")
+settings = ExtResource("3_settings")
+
+[node name="FogVolume" type="FogVolume" parent="."]
+position = Vector3(0, 0.75, 0)
+size = Vector3(24, 1.5, 20)
+material = SubResource("Material_fog")

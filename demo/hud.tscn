@@ -1,0 +1,280 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Shader" path="res://demo/shaders/field_debug.gdshader" id="1"]
+[ext_resource type="Script" path="res://demo/hud.gd" id="2"]
+
+[sub_resource type="StyleBoxFlat" id="Style_panel"]
+bg_color = Color(0.025, 0.043, 0.059, 0.94)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.17, 0.28, 0.32, 0.8)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_left = 10
+corner_radius_bottom_right = 10
+content_margin_left = 20.0
+content_margin_top = 18.0
+content_margin_right = 20.0
+content_margin_bottom = 18.0
+
+[sub_resource type="StyleBoxFlat" id="Style_button"]
+bg_color = Color(0.08, 0.16, 0.19, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_left = 5
+corner_radius_bottom_right = 5
+content_margin_left = 12.0
+content_margin_top = 8.0
+content_margin_right = 12.0
+content_margin_bottom = 8.0
+
+[sub_resource type="StyleBoxFlat" id="Style_active"]
+bg_color = Color(0.12, 0.33, 0.35, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_left = 5
+corner_radius_bottom_right = 5
+content_margin_left = 12.0
+content_margin_top = 8.0
+content_margin_right = 12.0
+content_margin_bottom = 8.0
+
+[sub_resource type="Theme" id="Theme_hud"]
+default_font_size = 15
+Button/colors/font_color = Color(0.8, 0.91, 0.92, 1)
+Button/styles/normal = SubResource("Style_button")
+Button/styles/hover = SubResource("Style_active")
+Button/styles/pressed = SubResource("Style_active")
+Label/colors/font_color = Color(0.73, 0.83, 0.85, 1)
+PanelContainer/styles/panel = SubResource("Style_panel")
+
+[sub_resource type="ShaderMaterial" id="Material_debug"]
+shader = ExtResource("1")
+
+[node name="HUD" type="CanvasLayer"]
+script = ExtResource("2")
+
+[node name="Layout" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = SubResource("Theme_hud")
+
+[node name="ControlsPanel" type="PanelContainer" parent="Layout"]
+offset_left = 24.0
+offset_top = 24.0
+offset_right = 334.0
+offset_bottom = 448.0
+
+[node name="Content" type="VBoxContainer" parent="Layout/ControlsPanel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Eyebrow" type="Label" parent="Layout/ControlsPanel/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.36, 0.77, 0.74, 1)
+theme_override_font_sizes/font_size = 12
+text = "VOLUMETRIC FIELD / 01"
+
+[node name="Title" type="Label" parent="Layout/ControlsPanel/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.96, 0.96, 1)
+theme_override_font_sizes/font_size = 29
+text = "Interactive fog"
+
+[node name="Subtitle" type="Label" parent="Layout/ControlsPanel/Content"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Push it. Watch it drift back."
+
+[node name="Separator" type="HSeparator" parent="Layout/ControlsPanel/Content"]
+layout_mode = 2
+
+[node name="DensityRow" type="HBoxContainer" parent="Layout/ControlsPanel/Content"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Layout/ControlsPanel/Content/DensityRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Density"
+
+[node name="DensityValue" type="Label" parent="Layout/ControlsPanel/Content/DensityRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "1.15"
+
+[node name="DensitySlider" type="HSlider" parent="Layout/ControlsPanel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+min_value = 0.0
+max_value = 3.0
+step = 0.01
+value = 1.15
+
+[node name="RecoveryRow" type="HBoxContainer" parent="Layout/ControlsPanel/Content"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Layout/ControlsPanel/Content/RecoveryRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Recovery half-life"
+
+[node name="RecoveryValue" type="Label" parent="Layout/ControlsPanel/Content/RecoveryRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "3.2 s"
+
+[node name="RecoverySlider" type="HSlider" parent="Layout/ControlsPanel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+min_value = 0.2
+max_value = 12.0
+step = 0.1
+value = 3.2
+
+[node name="WindRow" type="HBoxContainer" parent="Layout/ControlsPanel/Content"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Layout/ControlsPanel/Content/WindRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Wind speed"
+
+[node name="WindValue" type="Label" parent="Layout/ControlsPanel/Content/WindRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0.72 m/s"
+
+[node name="WindSlider" type="HSlider" parent="Layout/ControlsPanel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+max_value = 3.0
+step = 0.01
+value = 0.72
+
+[node name="HeightRow" type="HBoxContainer" parent="Layout/ControlsPanel/Content"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Layout/ControlsPanel/Content/HeightRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Layer height"
+
+[node name="HeightValue" type="Label" parent="Layout/ControlsPanel/Content/HeightRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "1.15 m"
+
+[node name="HeightSlider" type="HSlider" parent="Layout/ControlsPanel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+min_value = 0.2
+max_value = 3.0
+step = 0.05
+value = 1.15
+
+[node name="Buttons" type="HBoxContainer" parent="Layout/ControlsPanel/Content"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ResetButton" type="Button" parent="Layout/ControlsPanel/Content/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+text = "Reset"
+
+[node name="PauseButton" type="Button" parent="Layout/ControlsPanel/Content/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+toggle_mode = true
+text = "Pause"
+
+[node name="DebugButton" type="Button" parent="Layout/ControlsPanel/Content/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+toggle_mode = true
+text = "Field"
+
+[node name="StatusLabel" type="Label" parent="Layout/ControlsPanel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.42, 0.6, 0.64, 1)
+theme_override_font_sizes/font_size = 12
+text = "GPU field initializing..."
+
+[node name="HelpPanel" type="PanelContainer" parent="Layout"]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -116.0
+offset_right = 440.0
+offset_bottom = -24.0
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="Text" type="Label" parent="Layout/HelpPanel"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "WASD / arrows  move     Shift  sprint\nLeft drag  stir fog     Space  burst at cursor\nRight drag  orbit     Wheel  zoom\nR  reset     P  pause     Tab  field view"
+
+[node name="DebugPanel" type="PanelContainer" parent="Layout"]
+unique_name_in_owner = true
+visible = false
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -278.0
+offset_top = -326.0
+offset_right = -24.0
+offset_bottom = -24.0
+grow_horizontal = 0
+grow_vertical = 0
+
+[node name="Content" type="VBoxContainer" parent="Layout/DebugPanel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="DebugMode" type="OptionButton" parent="Layout/DebugPanel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+item_count = 3
+selected = 0
+popup/item_0/text = "Density"
+popup/item_0/id = 0
+popup/item_1/text = "Velocity"
+popup/item_1/id = 1
+popup/item_2/text = "Obstacle distance"
+popup/item_2/id = 2
+
+[node name="DebugMap" type="TextureRect" parent="Layout/DebugPanel/Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(210, 210)
+material = SubResource("Material_debug")
+layout_mode = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 0
+
+[node name="Axes" type="Label" parent="Layout/DebugPanel/Content"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "World X →    World Z ↓"

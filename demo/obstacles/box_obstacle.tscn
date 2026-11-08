@@ -1,0 +1,28 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://fog/fog_obstacle.gd" id="1"]
+
+[sub_resource type="BoxMesh" id="Mesh_box"]
+size = Vector3(2, 2.6, 2)
+
+[sub_resource type="StandardMaterial3D" id="Material_stone"]
+albedo_color = Color(0.17, 0.22, 0.27, 1)
+metallic = 0.25
+roughness = 0.62
+
+[sub_resource type="BoxShape3D" id="Shape_box"]
+size = Vector3(2, 2.6, 2)
+
+[node name="BoxObstacle" type="Node3D"]
+script = ExtResource("1")
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.3, 0)
+mesh = SubResource("Mesh_box")
+material_override = SubResource("Material_stone")
+
+[node name="Body" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Body"]
+position = Vector3(0, 1.3, 0)
+shape = SubResource("Shape_box")
