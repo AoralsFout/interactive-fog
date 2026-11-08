@@ -1,0 +1,64 @@
+layout(std430,set=0,binding=0) readonly buffer Parameters {
+    vec4 region; vec4 flow; vec4 dynamics; vec4 behavior; vec4 counts; vec4 pattern; vec4 solver;
+} params;
+layout(set=0,binding=1) uniform sampler2D obstacle_map;
+layout(set=0,binding=2) uniform sampler2D velocity_map;
+bool outside(vec2 uv) { return any(lessThan(uv,vec2(0))) || any(greaterThan(uv,vec2(1))); }
+float solid_distance(vec2 uv) { return outside(uv) ? 1000.0 : textureLod(obstacle_map,uv,0).r; }
+vec2 cell_size() { return params.region.xy/vec2(textureSize(velocity_map,0)); }
+// MAC：R 在单元右面，G 在 +Z 面；压力与散度使用配对的前后差分。
+vec2 velocity_at(vec2 uv) {
+    if(outside(uv)) { return params.flow.xy; }
+    vec2 h=1.0/vec2(textureSize(velocity_map,0));
+    return vec2(textureLod(velocity_map,uv-vec2(h.x*0.5,0),0).r,
+                textureLod(velocity_map,uv-vec2(0,h.y*0.5),0).g);
+}
+vec2 backtrace(vec2 uv,float dt) {
+    vec2 mid=uv-velocity_at(uv)*(dt*0.5)/params.region.xy;
+    vec2 travel=velocity_at(mid)*dt/params.region.xy;
+    int segments=clamp(int(ceil(length(travel*vec2(textureSize(obstacle_map,0)))*2.0)),1,8);
+    vec2 result=uv;
+    for(int i=1;i<=segments;i++) {
+        vec2 next=uv-travel*(float(i)/float(segments));
+        if(solid_distance(next)<=0.0) { break; }
+        result=next;
+    }
+    return result;
+}
+float hash21(vec2 p) {
+    vec3 q=fract(vec3(p.xyx)*0.1031); q+=dot(q,q.yzx+33.33);
+    return fract((q.x+q.y)*q.z);
+}
+float noise2(vec2 p) {
+    vec2 c=floor(p),f=fract(p),u=f*f*(3.0-2.0*f);
+    return mix(mix(hash21(c),hash21(c+vec2(1,0)),u.x),
+               mix(hash21(c+vec2(0,1)),hash21(c+vec2(1)),u.x),u.y);
+}
+// 多尺度密度仅在初始化与上风边界写入，此后细丝作为状态被搬运。
+float initial_density(vec2 p) {
+    vec2 q=p*params.pattern.y;
+    q+=(vec2(noise2(q*0.7),noise2(q*0.7+17.0))-0.5)*2.4;
+    float broad=noise2(q),fine=noise2(q*vec2(5.5,2.1)+9.3);
+    float ridge=1.0-smoothstep(0.025,0.14,abs(fine-0.5));
+    float cloud=smoothstep(0.36,0.66,broad);
+    return mix(1.0,clamp(cloud*0.35+ridge*(0.35+cloud*0.65),0.0,1.0),params.pattern.x);
+}
+
+float cubic(float a,float b,float c,float d,float t) {
+    return b+0.5*t*(c-a+t*(2.0*a-5.0*b+4.0*c-d+t*(3.0*(b-c)+d-a)));
+}
+// 窄雾丝反复使用线性采样会快速扩散；高阶重建后仍由搬运校正阶段限制极值。
+float density_sample(sampler2D field,vec2 uv) {
+    ivec2 size=textureSize(field,0);
+    vec2 p=uv*vec2(size)-0.5,f=fract(p);
+    ivec2 base=ivec2(floor(p));
+    vec4 rows;
+    for(int y=0;y<4;y++) {
+        vec4 values;
+        for(int x=0;x<4;x++) {
+            values[x]=texelFetch(field,clamp(base+ivec2(x-1,y-1),ivec2(0),size-1),0).r;
+        }
+        rows[y]=cubic(values.x,values.y,values.z,values.w,f.x);
+    }
+    return cubic(rows.x,rows.y,rows.z,rows.w,f.y);
+}

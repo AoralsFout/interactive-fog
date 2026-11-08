@@ -7,18 +7,13 @@ extends Node3D
 @export_node_path("Node3D") var player_path := NodePath("Player")
 @export_group("鼠标推雾")
 @export_range(0.2, 5.0, 0.1, "suffix:m") var brush_radius := 1.4
-## 按下瞬间的中心清除量；按住后持续推雾由 MouseBrush/FogInteractor 控制。
-@export_range(0.0, 8.0, 0.1) var brush_click_clearing := 2.5
-@export_range(0.0, 12.0, 0.1) var brush_click_speed := 3.5
-@export_range(0.0, 3.0, 0.05) var brush_compression_gain := 1.5
-@export_range(0.05, 2.0, 0.05, "suffix:m") var brush_compression_width := 0.35
-@export_group("空格冲击波")
-@export_range(0.5, 8.0, 0.1, "suffix:m") var burst_radius := 3.0
-@export_range(0.0, 12.0, 0.1) var burst_speed := 5.0
-@export_range(0.05, 2.0, 0.05, "suffix:s") var burst_duration := 0.4
-@export_range(0.0, 12.0, 0.1) var burst_clearing := 8.0
-@export_range(0.0, 3.0, 0.05) var burst_compression_gain := 1.8
-@export_range(0.05, 2.0, 0.05, "suffix:m") var burst_compression_width := 0.45
+## 单击注入偏心卷流；拖动则由笔刷的实际世界速度持续施力。
+@export_range(0.0, 8.0, 0.1) var brush_click_swirl := 2.0
+@export_group("空格卷流")
+@export_range(0.5, 8.0, 0.1, "suffix:m") var burst_radius := 2.5
+@export_range(0.0, 12.0, 0.1) var burst_speed := 4.0
+@export_range(0.05, 2.0, 0.05, "suffix:s") var burst_duration := 0.45
+@export_range(0.0, 8.0, 0.1) var burst_swirl := 3.0
 
 @onready var _field := get_node(fog_field_path) as InteractiveFogField
 @onready var _camera := get_node(camera_path) as Camera3D
@@ -56,8 +51,6 @@ func _update_brush() -> void:
 	_brush.visible = _valid_brush and not over_panel
 	_brush_interactor.enabled = _valid_brush and _painting and not over_panel
 	_brush_interactor.radius = brush_radius
-	_brush_interactor.compression_gain = brush_compression_gain
-	_brush_interactor.compression_width = brush_compression_width
 	_brush_ring.scale = Vector3(brush_radius, 1.0, brush_radius)
 
 
@@ -65,13 +58,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		_painting = event.pressed
 		if event.pressed and _valid_brush:
-			_field.disturb(_brush.global_position, brush_radius, Vector2.ZERO,
-				brush_click_clearing, brush_click_speed, 0.5,
-				brush_compression_gain, brush_compression_width)
+			_field.disturb(_brush.global_position, brush_radius, Vector2.ZERO, brush_click_swirl)
 	elif event.is_action_pressed("fog_burst"):
 		var position_for_burst := _brush.global_position if _valid_brush else _player.global_position
-		_field.burst(position_for_burst, burst_radius, burst_duration,
-			burst_clearing, burst_speed, 0.5, burst_compression_gain, burst_compression_width)
+		_field.burst(position_for_burst, burst_radius, burst_duration, burst_speed, burst_swirl)
 	elif event.is_action_pressed("fog_reset"):
 		_field.reset_simulation()
 	elif event.is_action_pressed("fog_pause"):

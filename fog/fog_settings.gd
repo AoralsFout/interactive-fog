@@ -11,7 +11,7 @@ extends Resource
 		area_size = value.max(Vector2(1.0, 1.0))
 		emit_changed()
 ## 正方形模拟纹理边长。修改此项会重新分配 GPU 资源，并重置已有尾迹。
-@export_enum("64:64", "128:128", "256:256", "512:512") var resolution: int = 128:
+@export_enum("64:64", "128:128", "256:256", "512:512") var resolution: int = 256:
 	set(value):
 		resolution = clampi(value, 32, 512)
 		emit_changed()
@@ -21,34 +21,34 @@ extends Resource
 		simulation_hz = clampf(value, 10.0, 60.0)
 		emit_changed()
 
-@export_group("流动与恢复")
+@export_group("流动与边界供给")
 ## X 对应世界 X，Y 对应世界 Z，单位米/秒。
 @export var wind_velocity := Vector2(0.7, 0.18):
 	set(value):
 		wind_velocity = value
 		emit_changed()
 ## 雾回到背景风速的速度。调低可使交互产生的尾流持续更久。
-@export_range(0.0, 8.0, 0.05) var wind_response := 0.8:
+@export_range(0.0, 8.0, 0.05) var wind_response := 0.12:
 	set(value):
 		wind_response = maxf(value, 0.0)
 		emit_changed()
 ## 额外速度的阻尼；采用指数衰减，不随帧率改变。
-@export_range(0.0, 5.0, 0.05) var velocity_damping := 0.25:
+@export_range(0.0, 5.0, 0.05) var velocity_damping := 0.08:
 	set(value):
 		velocity_damping = maxf(value, 0.0)
 		emit_changed()
-## 密度差恢复一半所需时间。实际还会受到周边雾的流动回填影响。
-@export_range(0.2, 20.0, 0.1, "suffix:s") var recovery_half_life := 3.2:
+## 上风边界补充新雾的半衰期；不改变场内已形成的密度和尾流。
+@export_range(0.2, 20.0, 0.1, "suffix:s") var inflow_half_life := 1.5:
 	set(value):
-		recovery_half_life = maxf(value, 0.2)
+		inflow_half_life = maxf(value, 0.2)
 		emit_changed()
-## 程序化旋流的加速度。它提供低成本扰动，不进行三维流体求解。
-@export_range(0.0, 5.0, 0.05) var turbulence_strength := 0.65:
+## 程序化旋流的加速度，包含大尺度流动与较弱的小涡旋，不进行三维流体求解。
+@export_range(0.0, 5.0, 0.05) var turbulence_strength := 0.25:
 	set(value):
 		turbulence_strength = maxf(value, 0.0)
 		emit_changed()
 ## 旋流的空间频率，越小越宽大。
-@export_range(0.1, 4.0, 0.05) var turbulence_scale := 0.65:
+@export_range(0.1, 4.0, 0.05) var turbulence_scale := 1.2:
 	set(value):
 		turbulence_scale = maxf(value, 0.1)
 		emit_changed()
@@ -57,14 +57,9 @@ extends Resource
 	set(value):
 		max_speed = maxf(value, 0.5)
 		emit_changed()
-## 障碍边缘开始导流的距离，单位米。
-@export_range(0.05, 2.0, 0.05, "suffix:m") var obstacle_influence := 0.65:
-	set(value):
-		obstacle_influence = maxf(value, 0.05)
-		emit_changed()
-## 大尺度疏密也写进模拟状态，因此这些轮廓会随速度场绕障碍搬运。
-## 设为 0 得到均匀基底；细碎的外观噪声仍由下方 detail_amount 控制。
-@export_range(0.0, 1.0, 0.01) var density_variation := 0.7:
+## 初始化及入流处的疏密变化，包含可交互的细丝。已有密度不会按此图案重新生成。
+## 修改后按“重置雾场”重新初始化；0 为均匀密度。
+@export_range(0.0, 1.0, 0.01) var density_variation := 1.0:
 	set(value):
 		density_variation = clampf(value, 0.0, 1.0)
 		emit_changed()
@@ -73,32 +68,21 @@ extends Resource
 		density_pattern_scale = maxf(value, 0.1)
 		emit_changed()
 
-@export_group("挤压与爆开")
-## 初始基准密度不超过 1；推雾后的外围允许堆积到此上限。
-@export_range(1.0, 16.0, 0.1) var max_density := 8.0:
+@export_group("流体求解")
+## 压力迭代次数；增加会更好地约束局部散度，也增加 GPU 开销。
+@export_range(12, 100, 2) var pressure_iterations := 64:
 	set(value):
-		max_density = clampf(value, 1.0, 16.0)
+		pressure_iterations = clampi(value, 12, 100)
 		emit_changed()
-## 浓雾环的超额密度释放一半所需时间，不影响中心空洞的恢复速度。
-@export_range(0.1, 10.0, 0.1, "suffix:s") var compression_half_life := 1.6:
+## 补偿网格搬运损失的涡量；不生成独立于流场的装饰旋涡。
+@export_range(0.0, 5.0, 0.05) var vorticity_strength := 1.5:
 	set(value):
-		compression_half_life = maxf(value, 0.1)
-		emit_changed()
-## 压缩区填满高度轮廓与噪声空隙的程度，使浓雾环更厚实。0 表示沿用普通雾轮廓。
-@export_range(0.0, 1.0, 0.01) var compression_visibility := 0.9:
-	set(value):
-		compression_visibility = clampf(value, 0.0, 1.0)
-		emit_changed()
-## 浓雾环相对平静雾层最多增高的比例，0.8 表示最多增加 80% 高度。
-## 只增高真正压缩的区域，不改变普通雾的厚度；FogVolume 会自动预留这个空间。
-@export_range(0.0, 1.5, 0.05) var compression_height_boost := 0.8:
-	set(value):
-		compression_height_boost = clampf(value, 0.0, 1.5)
+		vorticity_strength = clampf(value, 0.0, 5.0)
 		emit_changed()
 
 @export_group("雾的外观")
-## 平静雾层的高度。浓雾环可按 compression_height_boost 增高；太薄容易采样闪烁。
-@export_range(0.2, 4.0, 0.05, "suffix:m") var thickness := 1.5:
+## 雾体最大高度。主密度决定局部高度，三维噪声只补充纵向层次。
+@export_range(0.2, 4.0, 0.05, "suffix:m") var thickness := 0.85:
 	set(value):
 		thickness = maxf(value, 0.2)
 		emit_changed()
@@ -130,21 +114,37 @@ extends Resource
 	set(value):
 		obstacle_fade = maxf(value, 0.02)
 		emit_changed()
+## 细节的空间频率；增大可缩小雾丝与局部卷边，不改变模拟网格。
 @export_range(0.1, 5.0, 0.05) var detail_scale := 1.4:
 	set(value):
 		detail_scale = maxf(value, 0.1)
 		emit_changed()
-@export_range(0.0, 1.0, 0.01) var detail_amount := 0.8:
+## 细节对密度和高度的影响；接近 1 时透明空隙更清楚，0 为平滑雾层。
+@export_range(0.0, 1.0, 0.01) var detail_amount := 0.35:
 	set(value):
 		detail_amount = clampf(value, 0.0, 1.0)
 		emit_changed()
-## 噪声纹理本身的漂移比例，大尺度运动仍由模拟风场控制。
-@export_range(0.0, 2.0, 0.01) var detail_speed := 0.32:
+## 辅助噪声坐标的刷新周期。两组错开淡入淡出，主密度历史不参与刷新。
+@export_range(4.0, 40.0, 1.0, "suffix:s") var detail_reset_period := 12.0:
 	set(value):
-		detail_speed = maxf(value, 0.0)
+		detail_reset_period = clampf(value, 4.0, 40.0)
+		emit_changed()
+## 密度边缘的清晰度。过高会暴露体积雾采样网格，可适当降低或提高 Volume Size。
+@export_range(0.0, 1.0, 0.01) var detail_sharpness := 0.75:
+	set(value):
+		detail_sharpness = clampf(value, 0.0, 1.0)
+		emit_changed()
+## 随流搬运坐标上的三维噪声域扭曲；不直接使用瞬时速度偏移纹理。
+@export_range(0.0, 1.0, 0.01) var detail_warp := 0.65:
+	set(value):
+		detail_warp = clampf(value, 0.0, 1.0)
 		emit_changed()
 
 
 ## 渲染包围体使用的最大高度；各场景组件通过此接口共用一致的空间范围。
 func get_volume_height() -> float:
-	return thickness * (1.0 + compression_height_boost)
+	return thickness
+
+## 密度和材质坐标比速度场更细，但所有搬运共享同一投影后的速度。
+func get_density_resolution() -> int:
+	return resolution * 2

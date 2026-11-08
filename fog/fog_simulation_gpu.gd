@@ -1,196 +1,241 @@
 @tool
 class_name FogSimulationGPU
 extends RefCounted
-## GPU 资源与调度的唯一拥有者。此类不访问场景树、不读取 Inspector 属性。
-## 主线程把一帧所需的数值打包后提交；所有 RenderingDevice 调用均在渲染线程执行。
-## 使用主 RenderingDevice + Texture2DRD，结果直接交给体积雾，没有逐帧 GPU→CPU 回读。
+## 主 RenderingDevice 上的二维 MAC 流体与高分辨率密度搬运。
+## 所有 GPU RID 归此模块所有；运行时不回读、不 submit/sync。
 
 const MAX_OBSTACLES := 32
 const MAX_STAMPS := 16
-const STAMP_FLOAT_COUNT := 12
+const STAMP_FLOAT_COUNT := 8
 const PARAMETER_BYTES := 7 * 16
-const SIMULATION_SHADER: RDShaderFile = preload("res://fog/shaders/simulate.glsl")
-const OBSTACLE_SHADER: RDShaderFile = preload("res://fog/shaders/build_obstacles.glsl")
-const PREPARATION_SHADER: RDShaderFile = preload("res://fog/shaders/prepare_interactions.glsl")
+const SHADERS := {
+	"obstacles": preload("res://fog/shaders/build_obstacles.glsl"),
+	"velocity": preload("res://fog/shaders/velocity.glsl"),
+	"divergence": preload("res://fog/shaders/divergence.glsl"),
+	"pressure": preload("res://fog/shaders/pressure.glsl"),
+	"project": preload("res://fog/shaders/project_velocity.glsl"),
+	"predict": preload("res://fog/shaders/density_predict.glsl"),
+	"transport": preload("res://fog/shaders/simulate.glsl"),
+}
 
 var state_texture := Texture2DRD.new()
 var obstacle_texture := Texture2DRD.new()
+var coordinate_texture := Texture2DRD.new()
+var diagnostics_texture := Texture2DRD.new()
 
-# 以下变量仅在渲染线程读写。shutdown 后仍被已排队的 Callable 持有，避免悬空回调。
 var _rd: RenderingDevice
-var _resolution := 128
-var _state_rids: Array[RID] = []
-var _display_rid := RID()
-var _obstacle_rid := RID()
-var _parameters_rid := RID()
-var _stamps_rid := RID()
-var _obstacles_rid := RID()
-var _redistribution_rid := RID()
-var _sampler_rid := RID()
-var _simulation_shader_rid := RID()
-var _obstacle_shader_rid := RID()
-var _preparation_shader_rid := RID()
-var _simulation_pipeline := RID()
-var _obstacle_pipeline := RID()
-var _preparation_pipeline := RID()
-var _simulation_sets: Array[RID] = []
-var _preparation_sets: Array[RID] = []
-var _obstacle_set := RID()
-var _read_index := 0
+var _resolution := 256
+var _density_resolution := 512
+var _resources: Array[RID] = []
+var _shaders: Dictionary = {}
+var _pipelines: Dictionary = {}
+var _sets: Dictionary = {}
+var _states: Array[RID] = []
+var _coordinates: Array[RID] = []
+var _pressures: Array[RID] = []
+var _parameters := RID()
+var _stamps := RID()
+var _obstacles := RID()
+var _sampler := RID()
+var _mask := RID()
+var _velocity := RID()
+var _working_velocity := RID()
+var _before_projection := RID()
+var _after_projection := RID()
+var _predicted := RID()
+var _display := RID()
+var _display_coordinates := RID()
+var _read := 0
+var _pressure_read := 0
 var _ready_on_gpu := false
 
 
-func start(resolution: int) -> void:
-	RenderingServer.call_on_render_thread(_initialize.bind(resolution))
+func start(resolution: int, density_resolution: int) -> void:
+	RenderingServer.call_on_render_thread(_initialize.bind(resolution, density_resolution))
 
 
 func advance(parameters: PackedFloat32Array, stamps: PackedFloat32Array,
-		obstacles: PackedFloat32Array, rebuild_obstacles: bool) -> void:
-	# duplicate 是线程边界：调用者下一帧可继续复用自己的数组。
+		obstacles: PackedFloat32Array, rebuild: bool, iterations: int) -> void:
 	RenderingServer.call_on_render_thread(_advance.bind(
-		parameters.to_byte_array(), stamps.to_byte_array(),
-		obstacles.to_byte_array(), rebuild_obstacles))
+		parameters.to_byte_array(), stamps.to_byte_array(), obstacles.to_byte_array(), rebuild, iterations))
 
 
 func shutdown() -> void:
 	RenderingServer.call_on_render_thread(_release)
 
 
-func _initialize(resolution: int) -> void:
+func _own(rid: RID) -> RID:
+	_resources.append(rid)
+	return rid
+
+
+func _texture(size: int, format := RenderingDevice.DATA_FORMAT_R16G16B16A16_SFLOAT) -> RID:
+	var description := RDTextureFormat.new()
+	description.width = size
+	description.height = size
+	description.format = format
+	description.usage_bits = RenderingDevice.TEXTURE_USAGE_STORAGE_BIT | RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT | RenderingDevice.TEXTURE_USAGE_CAN_COPY_TO_BIT
+	var rid := _own(_rd.texture_create(description, RDTextureView.new()))
+	_rd.texture_clear(rid, Color(0, 0, 0, 0), 0, 1, 0, 1)
+	return rid
+
+
+func _uniform(type: int, binding: int, ids: Array[RID]) -> RDUniform:
+	var uniform := RDUniform.new()
+	uniform.uniform_type = type
+	uniform.binding = binding
+	for rid in ids:
+		uniform.add_id(rid)
+	return uniform
+
+
+func _sample(binding: int, rid: RID) -> RDUniform:
+	return _uniform(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, binding, [_sampler, rid])
+
+
+func _image(binding: int, rid: RID) -> RDUniform:
+	return _uniform(RenderingDevice.UNIFORM_TYPE_IMAGE, binding, [rid])
+
+
+func _buffer(binding: int, rid: RID) -> RDUniform:
+	return _uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, binding, [rid])
+
+
+func _common(velocity: RID) -> Array[RDUniform]:
+	return [_buffer(0, _parameters), _sample(1, _mask), _sample(2, velocity)]
+
+
+func _make_set(stage: String, uniforms: Array[RDUniform]) -> RID:
+	return _own(_rd.uniform_set_create(uniforms, _shaders[stage], 0))
+
+
+func _initialize(resolution: int, density_resolution: int) -> void:
 	_rd = RenderingServer.get_rendering_device()
 	if _rd == null:
 		return
 	_resolution = resolution
-	_simulation_shader_rid = _rd.shader_create_from_spirv(SIMULATION_SHADER.get_spirv())
-	_obstacle_shader_rid = _rd.shader_create_from_spirv(OBSTACLE_SHADER.get_spirv())
-	_preparation_shader_rid = _rd.shader_create_from_spirv(PREPARATION_SHADER.get_spirv())
-	if not _simulation_shader_rid.is_valid() or not _obstacle_shader_rid.is_valid() or not _preparation_shader_rid.is_valid():
-		push_error("交互雾：Compute Shader 创建失败，请检查着色器编译输出。")
-		_release()
-		return
-	_simulation_pipeline = _rd.compute_pipeline_create(_simulation_shader_rid)
-	_obstacle_pipeline = _rd.compute_pipeline_create(_obstacle_shader_rid)
-	_preparation_pipeline = _rd.compute_pipeline_create(_preparation_shader_rid)
-	_state_rids = [_create_texture(), _create_texture()]
-	_display_rid = _create_texture()
-	_obstacle_rid = _create_texture()
-	_parameters_rid = _rd.storage_buffer_create(PARAMETER_BYTES)
-	_stamps_rid = _rd.storage_buffer_create(MAX_STAMPS * STAMP_FLOAT_COUNT * 4)
-	_obstacles_rid = _rd.storage_buffer_create(MAX_OBSTACLES * 32)
-	_redistribution_rid = _rd.storage_buffer_create(MAX_STAMPS * 16)
+	_density_resolution = density_resolution
+	for stage in SHADERS:
+		var shader_file: RDShaderFile = SHADERS[stage]
+		var shader := _own(_rd.shader_create_from_spirv(shader_file.get_spirv()))
+		if not shader.is_valid():
+			push_error("交互雾：GPU shader 创建失败：" + stage)
+			_release()
+			return
+		_shaders[stage] = shader
+		_pipelines[stage] = _own(_rd.compute_pipeline_create(shader))
+	_parameters = _own(_rd.storage_buffer_create(PARAMETER_BYTES))
+	_stamps = _own(_rd.storage_buffer_create(MAX_STAMPS * STAMP_FLOAT_COUNT * 4))
+	_obstacles = _own(_rd.storage_buffer_create(MAX_OBSTACLES * 32))
 	var sampler := RDSamplerState.new()
 	sampler.mag_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
 	sampler.min_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
 	sampler.repeat_u = RenderingDevice.SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE
 	sampler.repeat_v = RenderingDevice.SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE
-	_sampler_rid = _rd.sampler_create(sampler)
+	_sampler = _own(_rd.sampler_create(sampler))
+	_mask = _texture(_density_resolution)
+	_velocity = _texture(_resolution)
+	_working_velocity = _texture(_resolution)
+	_before_projection = _texture(_resolution)
+	_after_projection = _texture(_resolution)
+	_predicted = _texture(_density_resolution)
+	_display = _texture(_density_resolution)
+	_display_coordinates = _texture(_density_resolution, RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT)
+	for index in range(2):
+		_states.append(_texture(_density_resolution))
+		_coordinates.append(_texture(_density_resolution, RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT))
+		_pressures.append(_texture(_resolution, RenderingDevice.DATA_FORMAT_R32_SFLOAT))
 
-	for read_index in range(2):
-		var uniforms: Array[RDUniform] = [
-			_uniform(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, [_sampler_rid, _state_rids[read_index]]),
-			_uniform(RenderingDevice.UNIFORM_TYPE_IMAGE, 1, [_state_rids[1 - read_index]]),
-			_uniform(RenderingDevice.UNIFORM_TYPE_IMAGE, 2, [_display_rid]),
-			_uniform(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 3, [_sampler_rid, _obstacle_rid]),
-			_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 4, [_parameters_rid]),
-			_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 5, [_stamps_rid]),
-			_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 6, [_redistribution_rid]),
-		]
-		_simulation_sets.append(_rd.uniform_set_create(uniforms, _simulation_shader_rid, 0))
-		var preparation_uniforms: Array[RDUniform] = [
-			_uniform(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, [_sampler_rid, _state_rids[read_index]]),
-			_uniform(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, [_sampler_rid, _obstacle_rid]),
-			_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 2, [_parameters_rid]),
-			_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 3, [_stamps_rid]),
-			_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 4, [_redistribution_rid]),
-		]
-		_preparation_sets.append(_rd.uniform_set_create(preparation_uniforms, _preparation_shader_rid, 0))
-	var obstacle_uniforms: Array[RDUniform] = [
-		_uniform(RenderingDevice.UNIFORM_TYPE_IMAGE, 0, [_obstacle_rid]),
-		_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 1, [_parameters_rid]),
-		_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 2, [_obstacles_rid]),
-	]
-	_obstacle_set = _rd.uniform_set_create(obstacle_uniforms, _obstacle_shader_rid, 0)
-	state_texture.texture_rd_rid = _display_rid
-	obstacle_texture.texture_rd_rid = _obstacle_rid
+	_sets["obstacles"] = _make_set("obstacles", [_image(0, _mask), _buffer(1, _parameters), _buffer(2, _obstacles)])
+	var uniforms := _common(_velocity)
+	uniforms.append_array([_image(3, _working_velocity), _buffer(4, _stamps), _sample(5, _after_projection)])
+	_sets["velocity"] = _make_set("velocity", uniforms)
+	uniforms = _common(_working_velocity)
+	uniforms.append_array([_image(3, _before_projection), _sample(4, _after_projection)])
+	_sets["divergence"] = _make_set("divergence", uniforms)
+	uniforms = _common(_velocity)
+	uniforms.append_array([_image(3, _after_projection), _sample(4, _before_projection)])
+	_sets["diagnostics"] = _make_set("divergence", uniforms)
+	for index in range(2):
+		uniforms = _common(_working_velocity)
+		uniforms.append_array([_sample(3, _before_projection), _sample(4, _pressures[index]), _image(5, _pressures[1 - index])])
+		_sets["pressure%d" % index] = _make_set("pressure", uniforms)
+		uniforms = _common(_working_velocity)
+		uniforms.append_array([_sample(3, _pressures[index]), _image(4, _velocity)])
+		_sets["project%d" % index] = _make_set("project", uniforms)
+		uniforms = _common(_velocity)
+		uniforms.append_array([_sample(3, _states[index]), _image(4, _predicted)])
+		_sets["predict%d" % index] = _make_set("predict", uniforms)
+		uniforms = _common(_velocity)
+		uniforms.append_array([
+			_sample(3, _states[index]), _sample(4, _predicted), _sample(5, _coordinates[index]),
+			_image(6, _states[1 - index]), _image(7, _coordinates[1 - index]),
+			_image(8, _display), _image(9, _display_coordinates)])
+		_sets["transport%d" % index] = _make_set("transport", uniforms)
+	for rid in _resources:
+		if not rid.is_valid():
+			push_error("交互雾：流体资源或 uniform set 创建失败。")
+			_release()
+			return
+	state_texture.texture_rd_rid = _display
+	obstacle_texture.texture_rd_rid = _mask
+	coordinate_texture.texture_rd_rid = _display_coordinates
+	diagnostics_texture.texture_rd_rid = _after_projection
 	_ready_on_gpu = true
 
 
-func _create_texture() -> RID:
-	var format := RDTextureFormat.new()
-	format.width = _resolution
-	format.height = _resolution
-	format.format = RenderingDevice.DATA_FORMAT_R16G16B16A16_SFLOAT
-	format.usage_bits = (
-		RenderingDevice.TEXTURE_USAGE_STORAGE_BIT
-		| RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT
-		| RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT
-	)
-	return _rd.texture_create(format, RDTextureView.new())
-
-
-func _uniform(type: RenderingDevice.UniformType, binding: int, ids: Array[RID]) -> RDUniform:
-	var uniform := RDUniform.new()
-	uniform.uniform_type = type
-	uniform.binding = binding
-	for id in ids:
-		uniform.add_id(id)
-	return uniform
+func _dispatch(list: int, stage: String, uniform_set: RID, size: int) -> void:
+	_rd.compute_list_bind_compute_pipeline(list, _pipelines[stage])
+	_rd.compute_list_bind_uniform_set(list, uniform_set, 0)
+	_rd.compute_list_dispatch(list, ceili(float(size) / 8.0), ceili(float(size) / 8.0), 1)
+	_rd.compute_list_add_barrier(list)
 
 
 func _advance(parameters: PackedByteArray, stamps: PackedByteArray,
-		obstacles: PackedByteArray, rebuild_obstacles: bool) -> void:
+		obstacles: PackedByteArray, rebuild: bool, iterations: int) -> void:
 	if not _ready_on_gpu:
 		return
-	_rd.buffer_update(_parameters_rid, 0, parameters.size(), parameters)
+	_rd.buffer_update(_parameters, 0, parameters.size(), parameters)
 	if not stamps.is_empty():
-		_rd.buffer_update(_stamps_rid, 0, stamps.size(), stamps)
-	if rebuild_obstacles and not obstacles.is_empty():
-		_rd.buffer_update(_obstacles_rid, 0, obstacles.size(), obstacles)
-	var groups := ceili(float(_resolution) / 8.0)
-	var compute_list := _rd.compute_list_begin()
-	if rebuild_obstacles:
-		_rd.compute_list_bind_compute_pipeline(compute_list, _obstacle_pipeline)
-		_rd.compute_list_bind_uniform_set(compute_list, _obstacle_set, 0)
-		_rd.compute_list_dispatch(compute_list, groups, groups, 1)
-		# mask 写入必须在模拟读取之前完成；RD 负责其余跨渲染阶段的资源屏障。
-		_rd.compute_list_add_barrier(compute_list)
-	var stamp_count := int(float(stamps.size()) / float(STAMP_FLOAT_COUNT * 4))
-	if stamp_count > 0:
-		_rd.compute_list_bind_compute_pipeline(compute_list, _preparation_pipeline)
-		_rd.compute_list_bind_uniform_set(compute_list, _preparation_sets[_read_index], 0)
-		_rd.compute_list_dispatch(compute_list, stamp_count, 1, 1)
-		# 预估的移出雾量必须先写完，主模拟再读取；整个过程都留在 GPU。
-		_rd.compute_list_add_barrier(compute_list)
-	_rd.compute_list_bind_compute_pipeline(compute_list, _simulation_pipeline)
-	_rd.compute_list_bind_uniform_set(compute_list, _simulation_sets[_read_index], 0)
-	_rd.compute_list_dispatch(compute_list, groups, groups, 1)
+		_rd.buffer_update(_stamps, 0, stamps.size(), stamps)
+	if rebuild and not obstacles.is_empty():
+		_rd.buffer_update(_obstacles, 0, obstacles.size(), obstacles)
+	if parameters.decode_float(72) > 0.5:
+		for pressure in _pressures:
+			_rd.texture_clear(pressure, Color(0, 0, 0, 0), 0, 1, 0, 1)
+		for diagnostic in [_before_projection, _after_projection]:
+			_rd.texture_clear(diagnostic, Color(0, 0, 0, 0), 0, 1, 0, 1)
+	var list := _rd.compute_list_begin()
+	if rebuild:
+		_dispatch(list, "obstacles", _sets["obstacles"], _density_resolution)
+	_dispatch(list, "velocity", _sets["velocity"], _resolution)
+	_dispatch(list, "divergence", _sets["divergence"], _resolution)
+	for index in range(iterations):
+		_dispatch(list, "pressure", _sets["pressure%d" % _pressure_read], _resolution)
+		_pressure_read = 1 - _pressure_read
+	_dispatch(list, "project", _sets["project%d" % _pressure_read], _resolution)
+	_dispatch(list, "divergence", _sets["diagnostics"], _resolution)
+	_dispatch(list, "predict", _sets["predict%d" % _read], _density_resolution)
+	_dispatch(list, "transport", _sets["transport%d" % _read], _density_resolution)
 	_rd.compute_list_end()
-	_read_index = 1 - _read_index
-	# 主设备由 Godot 提交。这里不能 submit()/sync()，否则会破坏引擎调度或造成等待。
+	_read = 1 - _read
 
 
 func _release() -> void:
 	if _rd == null:
 		return
 	_ready_on_gpu = false
-	# 先解除高级纹理包装，再释放底层 RID；防止编辑器重新加载脚本时留下失效引用。
-	state_texture.texture_rd_rid = RID()
-	obstacle_texture.texture_rd_rid = RID()
-	var resources: Array[RID] = []
-	resources.append_array(_simulation_sets)
-	resources.append_array(_preparation_sets)
-	resources.append(_obstacle_set)
-	resources.append_array([_simulation_pipeline, _obstacle_pipeline, _preparation_pipeline])
-	resources.append_array(_state_rids)
-	resources.append_array([
-		_display_rid, _obstacle_rid, _sampler_rid, _parameters_rid,
-		_stamps_rid, _obstacles_rid, _simulation_shader_rid, _obstacle_shader_rid,
-		_redistribution_rid, _preparation_shader_rid,
-	])
-	for rid in resources:
+	for wrapper in [state_texture, obstacle_texture, coordinate_texture, diagnostics_texture]:
+		wrapper.texture_rd_rid = RID()
+	_resources.reverse()
+	for rid in _resources:
 		if rid.is_valid():
 			_rd.free_rid(rid)
-	_simulation_sets.clear()
-	_preparation_sets.clear()
-	_state_rids.clear()
+	_resources.clear()
+	_states.clear()
+	_coordinates.clear()
+	_pressures.clear()
+	_sets.clear()
+	_shaders.clear()
+	_pipelines.clear()
 	_rd = null

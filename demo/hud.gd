@@ -88,11 +88,11 @@ func _sync_controls() -> void:
 	if settings == null:
 		return
 	%DensitySlider.set_value_no_signal(settings.density)
-	%RecoverySlider.set_value_no_signal(settings.recovery_half_life)
+	%RecoverySlider.set_value_no_signal(settings.inflow_half_life)
 	%WindSlider.set_value_no_signal(settings.wind_velocity.length())
 	%HeightSlider.set_value_no_signal(settings.thickness)
 	%DensityValue.text = "%.2f" % settings.density
-	%RecoveryValue.text = "%.1f s" % settings.recovery_half_life
+	%RecoveryValue.text = "%.1f s" % settings.inflow_half_life
 	%WindValue.text = "%.2f m/s" % settings.wind_velocity.length()
 	%HeightValue.text = "%.2f m" % settings.thickness
 	_sync_field_map_style()
@@ -112,7 +112,7 @@ func _set_density(value: float) -> void:
 
 
 func _set_recovery(value: float) -> void:
-	_field.settings.recovery_half_life = value
+	_field.settings.inflow_half_life = value
 
 
 func _set_wind(value: float) -> void:

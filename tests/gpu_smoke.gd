@@ -1,7 +1,7 @@
 extends SceneTree
 ## 真正的渲染设备集成检查（不能以 --headless 运行）。
 ## 回读只出现在此验证脚本，运行时雾场不会回读 GPU。
-## 验证清除/恢复、障碍变化、热调参、分辨率重建、场景销毁，并保存实际视口截图。
+## 验证真实速度交互、障碍变化、热调参、分辨率重建、场景销毁，并保存实际视口截图。
 
 var _failures := 0
 var _demo: Node3D
@@ -41,18 +41,14 @@ func _run() -> void:
 	_field.settings.wind_velocity = Vector2.ZERO
 	_field.settings.turbulence_strength = 0.0
 	_field.settings.density_variation = 0.0
-	_field.settings.recovery_half_life = 0.6
+	_field.settings.inflow_half_life = 0.6
 	_field.reset_simulation()
 	await _simulated(0.15)
 	var baseline := _density_at(Vector2.ZERO)
 	_check(baseline > 0.98, "undisturbed density is full: %.3f" % baseline)
-	_field.disturb(Vector3.ZERO, 1.8, Vector2.ZERO, 4.0, 0.0, 0.0)
-	await _simulated(0.10)
-	var cleared := _density_at(Vector2.ZERO)
-	_check(cleared < 0.25, "burst clears persistent density: %.3f" % cleared)
-	await _simulated(1.2)
-	var recovered := _density_at(Vector2.ZERO)
-	_check(recovered > 0.7 and recovered > cleared + 0.4, "density recovers: %.3f" % recovered)
+	_field.disturb(Vector3.ZERO, 1.8, Vector2(2.0, 0.0), 2.0)
+	await _simulated(0.4)
+	_check(_density_at(Vector2.ZERO) > 0.98, "stirring uniform density does not erase fog")
 
 	var wall := _demo.get_node("Obstacles/WallWest") as FogObstacle3D
 	var old_position := wall.position
@@ -67,7 +63,7 @@ func _run() -> void:
 	_field.reset_simulation()
 	await _simulated(0.15)
 	var near_velocity := _sample(_field.get_state_texture(), Vector2(-0.55, 0.0)).g
-	var far_velocity := _sample(_field.get_state_texture(), Vector2(-2.0, 0.0)).g
+	var far_velocity := _sample(_field.get_state_texture(), Vector2(-8.0, 0.0)).g
 	_check(near_velocity < 0.6 and far_velocity > 1.5, "obstacle guides wind: near %.3f, far %.3f" % [near_velocity, far_velocity])
 	# 即使暂停流动，编辑几何仍刷新遮罩；测试编辑器常用的静态调参路径。
 	_field.simulation_enabled = false
@@ -78,11 +74,11 @@ func _run() -> void:
 	_check(_obstacle_distance_at(Vector2.ZERO) > 0.0, "paused field refreshes moved obstacles")
 	_field.settings.thickness = 1.8
 	await _frames(3)
-	var expected_height := 1.8 * (1.0 + _field.settings.compression_height_boost)
-	_check(is_equal_approx((_field.get_node("FogVolume") as FogVolume).size.y, expected_height), "height updates existing scene node and reserves compressed rim space")
+	var expected_height := 1.8
+	_check(is_equal_approx((_field.get_node("FogVolume") as FogVolume).size.y, expected_height), "height updates existing scene node")
 	_field.settings.resolution = 64
 	await _frames(6)
-	_check(_field.get_state_texture().get_width() == 64, "live resolution rebuild")
+	_check(_field.get_state_texture().get_width() == 128, "live velocity/density resolution rebuild")
 	_field.settings = FogSettings.new()
 	await _frames(6)
 	var hud := _demo.get_node("HUD") as FogDemoHUD
@@ -118,7 +114,7 @@ func _run() -> void:
 	await _frames(5)
 	root.get_texture().get_image().save_png("res://artifacts/preview.png")
 	(hud.get_node("%DebugButton") as Button).button_pressed = true
-	_field.disturb(Vector3(0, 0, 1), 2.6, Vector2(1.0, 0.0), 4.0, 4.0, 1.5)
+	_field.disturb(Vector3(0, 0, 1), 2.6, Vector2(2.0, 0.0), 3.0)
 	_field.simulation_enabled = true
 	await _simulated(0.25)
 	_field.simulation_enabled = false

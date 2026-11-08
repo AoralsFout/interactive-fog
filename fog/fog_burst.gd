@@ -1,44 +1,33 @@
 @tool
 class_name FogBurst
 extends RefCounted
-## 一次扩张冲击的状态，不创建任何场景节点。
-## 按模拟时间推进，波前逐步扩大；暂停雾场时也会暂停冲击。
+## 在有限时间内注入偏心旋涡和方向冲量。密度始终由速度搬运。
 
 var world_position: Vector3
 var radius: float
 var duration: float
-var clear_amount: float
-var radial_speed: float
-var swirl_speed: float
-var compression_gain: float
-var compression_width: float
+var strength: float
+var swirl: float
 var elapsed := 0.0
 
 
-func _init(position: Vector3, target_radius: float, lifetime: float, clearing: float,
-		push_speed: float, rotation_speed: float, gain: float, width: float) -> void:
+func _init(position: Vector3, size: float, lifetime: float, speed: float, spin: float) -> void:
 	world_position = position
-	radius = maxf(target_radius, 0.1)
+	radius = maxf(size, 0.1)
 	duration = maxf(lifetime, 0.05)
-	clear_amount = maxf(clearing, 0.0)
-	radial_speed = push_speed
-	swirl_speed = rotation_speed
-	compression_gain = maxf(gain, 0.0)
-	compression_width = maxf(width, 0.05)
+	strength = speed
+	swirl = spin
 
 
 func advance(step: float) -> PackedFloat32Array:
-	# 最后一小步按剩余时长缩放，避免不同模拟频率产生不同总冲量。
-	var active_step := minf(step, duration - elapsed)
+	var active := minf(step, duration - elapsed)
 	elapsed = minf(elapsed + step, duration)
-	var progress := elapsed / duration
-	var expansion := 1.0 - (1.0 - progress) * (1.0 - progress)
-	var front_radius := radius * lerpf(0.2, 1.0, expansion)
-	var rate_scale := active_step / (step * duration)
+	var rate := active / maxf(step * duration, 0.0001)
+	var offset := Vector2(cos(elapsed * 1.3), sin(elapsed * 1.3)) * radius * 0.3
+	# 一个偏心旋涡叠加方向冲量；压力投影会自然形成回流，形状不指定为圆环。
 	return PackedFloat32Array([
-		world_position.x, world_position.z, front_radius, clear_amount * rate_scale,
-		0.0, 0.0, radial_speed * rate_scale, swirl_speed * rate_scale,
-		compression_gain, compression_width, 0.0, 0.0,
+		world_position.x + offset.x, world_position.z + offset.y, radius,
+		swirl * rate, strength * rate, strength * 0.28 * rate, 0.0, 0.0,
 	])
 
 

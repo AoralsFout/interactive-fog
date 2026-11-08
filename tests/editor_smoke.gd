@@ -29,14 +29,20 @@ func run(plugin: EditorPlugin) -> void:
 	_check(is_equal_approx(field.get_simulation_time(), paused_time), "editor preview can pause")
 	var old_height := field.settings.thickness
 	var old_density := field.settings.density
+	var old_sharpness := field.settings.detail_sharpness
+	var old_warp := field.settings.detail_warp
 	field.settings.thickness = 2.1
 	field.settings.density = 1.7
+	field.settings.detail_sharpness = 0.6
+	field.settings.detail_warp = 0.8
 	await _frames(4)
 	var volume := field.get_node("FogVolume") as FogVolume
 	var material: ShaderMaterial = field.get("_render_material")
-	var expected_height := 2.1 * (1.0 + field.settings.compression_height_boost)
+	var expected_height := 2.1
 	_check(is_equal_approx(volume.size.y, expected_height), "Inspector-style height changes apply while paused")
 	_check(is_equal_approx(material.get_shader_parameter("density"), 1.7), "Inspector-style density updates render material")
+	_check(is_equal_approx(material.get_shader_parameter("detail_sharpness"), 0.6), "Inspector-style edge sharpness updates while paused")
+	_check(is_equal_approx(material.get_shader_parameter("detail_warp"), 0.8), "Inspector-style filament warping updates while paused")
 	var wall := scene.get_node("Obstacles/WallWest") as FogObstacle3D
 	var old_size := wall.box_size
 	wall.box_size = Vector2(5.0, 1.1)
@@ -57,6 +63,8 @@ func run(plugin: EditorPlugin) -> void:
 	wall.box_size = old_size
 	field.settings.thickness = old_height
 	field.settings.density = old_density
+	field.settings.detail_sharpness = old_sharpness
+	field.settings.detail_warp = old_warp
 	field.preview_in_editor = true
 	await _frames(3)
 	# 先由编辑器关闭场景，确保 @tool / gizmo 在编辑器单例销毁前完成清理。

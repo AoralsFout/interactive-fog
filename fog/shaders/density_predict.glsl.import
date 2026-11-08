@@ -1,0 +1,13 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://bqx7ja8rqaeho"
+path="res://.godot/imported/density_predict.glsl-b068f9f664a77f3e731fe97d919ffc70.res"
+
+[deps]
+
+source_file="res://fog/shaders/density_predict.glsl"
+dest_files=["res://.godot/imported/density_predict.glsl-b068f9f664a77f3e731fe97d919ffc70.res"]
+
+[params]

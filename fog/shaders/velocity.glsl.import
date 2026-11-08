@@ -1,0 +1,13 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://dpp6167pr23"
+path="res://.godot/imported/velocity.glsl-7bb7c6761dbbe6b4102e06587772709f.res"
+
+[deps]
+
+source_file="res://fog/shaders/velocity.glsl"
+dest_files=["res://.godot/imported/velocity.glsl-7bb7c6761dbbe6b4102e06587772709f.res"]
+
+[params]

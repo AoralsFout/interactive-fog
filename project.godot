@@ -91,4 +91,6 @@ fog_debug={
 [rendering]
 
 rendering_device/driver.windows="d3d12"
-environment/volumetric_fog/volume_size=96
+environment/volumetric_fog/volume_size=288
+environment/volumetric_fog/volume_depth=192
+environment/volumetric_fog/use_filter=0

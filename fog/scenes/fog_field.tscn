@@ -6,13 +6,13 @@
 
 [sub_resource type="FastNoiseLite" id="Noise_detail"]
 seed = 173
-frequency = 0.08
+frequency = 0.04
 fractal_octaves = 3
 
 [sub_resource type="NoiseTexture3D" id="Texture_detail"]
-width = 32
-height = 32
-depth = 32
+width = 128
+height = 128
+depth = 128
 seamless = true
 noise = SubResource("Noise_detail")
 

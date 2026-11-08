@@ -44,4 +44,3 @@ material_override = SubResource("Material_player")
 [node name="FogInteractor" type="Node3D" parent="."]
 script = ExtResource("2")
 radius = 1.1
-clearing_rate = 7.0

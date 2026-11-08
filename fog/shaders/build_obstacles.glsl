@@ -8,11 +8,11 @@ layout(rgba16f, set = 0, binding = 0) uniform writeonly image2D obstacle_map;
 layout(std430, set = 0, binding = 1) readonly buffer Parameters {
     vec4 region;       // 宽、深、世界原点 X、Z
     vec4 flow;         // 风 X、Z、旋流强度、旋流频率
-    vec4 dynamics;     // dt、累计时间、恢复系数、速度阻尼
+    vec4 dynamics;     // dt、累计时间、边界补雾系数、速度阻尼
     vec4 behavior;     // 风速恢复、最大速度、导流距离、保留
     vec4 counts;       // 障碍数量、交互数量、重置标记、分辨率
     vec4 pattern;      // 基础密度变化强度、空间频率、保留、保留
-    vec4 compression;  // 与模拟共用参数缓冲，保持布局一致
+    vec4 solver;       // 涡量约束等求解参数，保持布局一致
 } params;
 struct Obstacle { vec4 geometry; vec4 transform; };
 layout(std430, set = 0, binding = 2) readonly buffer Obstacles { Obstacle items[]; } obstacles;
@@ -35,11 +35,9 @@ void main() {
     vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
     vec2 p = (uv - 0.5) * params.region.xy + params.region.zw;
 
-    // 区域边界也视为固体，使边界风速沿区域边缘滑动。
-    vec2 border = (0.5 - abs(uv - 0.5)) * params.region.xy;
-    float distance = min(border.x, border.y);
-    vec2 normal = border.x < border.y ? vec2(uv.x < 0.5 ? 1.0 : -1.0, 0.0)
-                                            : vec2(0.0, uv.y < 0.5 ? 1.0 : -1.0);
+    // 域边界开放，障碍才是固体；上风边界在搬运阶段补雾。
+    float distance = 1000.0;
+    vec2 normal = vec2(0.0);
     int nearest = -1;
     for (int i = 0; i < int(params.counts.x); i++) {
         float d = shape_distance(p, obstacles.items[i]);

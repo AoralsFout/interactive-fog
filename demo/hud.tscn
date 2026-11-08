@@ -104,7 +104,7 @@ text = "Interactive fog"
 [node name="Subtitle" type="Label" parent="Layout/ControlsPanel/Content" unique_id=1664934641]
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
-text = "Push it. Watch it drift back."
+text = "Stir it. Follow the flow."
 
 [node name="Separator" type="HSeparator" parent="Layout/ControlsPanel/Content" unique_id=802339478]
 layout_mode = 2
@@ -136,7 +136,7 @@ layout_mode = 2
 [node name="Label" type="Label" parent="Layout/ControlsPanel/Content/RecoveryRow" unique_id=1028456622]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Recovery half-life"
+text = "Boundary supply half-life"
 
 [node name="RecoveryValue" type="Label" parent="Layout/ControlsPanel/Content/RecoveryRow" unique_id=471298137]
 unique_name_in_owner = true
@@ -244,7 +244,7 @@ mouse_filter = 2
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
 text = "WASD / arrows  move     Shift  sprint
-Left drag  stir fog     Space  burst at cursor
+Left drag  stir fog     Space  vortex at cursor
 Right drag  orbit     Wheel  zoom
 R  reset     P  pause     Tab  field view"
 

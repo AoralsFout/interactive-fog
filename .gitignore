@@ -5,3 +5,5 @@
 # Local editor configuration and temporary verification output.
 /.vscode/
 /artifacts/editor-save-check.tscn
+/artifacts/fog-detail/*.log
+/artifacts/flow-transport/frames/
