@@ -13,7 +13,7 @@ Godot 4.7 / Forward+ 的浅层交互雾。二维流体负责水平运动，主�
 | WASD / 方向键、Shift | 角色移动、加速，推动雾并留下尾流 |
 | 左键拖动 | 根据笔刷的实际世界速度向流场施力 |
 | 左键单击 | 注入小旋涡；按住静止时不持续擦除雾 |
-| Space | 短时偏心卷流，形状由流体演化 |
+| Space | 从鼠标位置径向推开雾，在移动波前堆积并留下卷曲尾流 |
 | 右键拖动、滚轮 | 环绕相机、缩放 |
 | R / P / Tab | 重置 / 暂停 / 二维场图 |
 
@@ -42,6 +42,16 @@ flowchart TD
 
 方法参考：[GPU Gems 38：GPU 流体](https://developer.nvidia.com/gpugems/gpugems/part-vi-beyond-triangles/chapter-38-fast-fluid-dynamics-simulation-gpu)、[GPU Gems 3 / 30：高阶搬运](https://developer.nvidia.com/gpugems/gpugems3/part-v-physics-simulation/chapter-30-real-time-simulation-and-rendering-3d-fluids)。
 
+### 径向扩散
+
+扩散是投影后的一条短时搬运路径。波前半径按平滑曲线增长，内部径向速度逐渐稀释中心，速度在外圈下降形成压缩。密度通过单元面上的有限体积通量重新分配，不直接清除圆盘或往预设圆环加雾。三维噪声坐标使用同一冲击速度回溯，所以细节会一同移动。
+
+冲击速度预先构建为高分辨率 MAC 场；障碍距离场用于从源点进行保守的球面步进遮挡检查，固体面通量为零，近障碍速度沿表面导流。它不求解绕障碍传播的声波或完整三维爆炸。
+
+冲击密度使用 MC 限制斜率重建与通量差更新，子步按 CFL 0.4 自动细分。内部密度和预测纹理为单通道 R32F，避免多子步反复量化；对渲染与场图的展示接口仍为 RGBA16F。正常流动仍走原有的高阶 MacCormack 搬运。冲击还向常规流场注入少量旋流，使波前在冲击结束后继续变形。
+
+最多同时处理 4 个冲击，每主时间步最多 64 个冲击子步。极小区域、高分辨率或极端重叠触及子步上限时，会按 CFL 约束削弱冲击速度。密度安全上限默认为 16，达到上限时会损失部分雾量；常规参数下的单次均匀雾扩散验收，二维密度积分误差约 0.003%。原理参考：[Clawpack 的有限体积与通量方法](https://www.clawpack.org/v5.3.x/wp_algorithms.html)。
+
 ## 参数与编辑器
 
 在 `demo/main.tscn` 选中 **FogField → Settings**。开启编辑器的“使用场景环境 / 使用场景灯光”可预览。所有外观参数即时同步；流动参数在下一步生效。
@@ -63,12 +73,15 @@ flowchart TD
 | Detail Amount / Scale | 0.35 / 1.4 | 辅助三维纹理强度与空间频率 |
 | Detail Reset Period | 12 s | 辅助坐标刷新周期，不清除主密度历史 |
 | Detail Sharpness / Warp | 0.75 / 0.65 | 密度外观对比与随流坐标上的噪声域扭曲 |
+| Max Compressed Density | 16 | 冲击路径的密度安全上限 |
 
 `Preview In Editor` 控制编辑器播放，`Simulation Enabled` 控制流动。暂停会冻结密度、材质坐标及噪声动画；移动障碍仍更新遮罩与固体区域。修改分辨率、区域或场位置会重置状态；普通外观调整保留历史。
 
 柱子与墙保留可编辑的二维足迹、可见几何同步及 Gizmo。自定义模型关闭 `Sync Prefab Geometry` 后独立配置足迹。原生 Light3D 的颜色、体积雾能量和阴影继续影响雾。
 
 主场景保留已有的 0.85 m 层高、白色散射颜色与相机参数。旧的逐格恢复、清除强度和规则圆环挤压参数已移除；旧预设需要按新参数重新保存。
+
+主场景根节点的“空格径向扩散”提供范围、强度倍率、持续时间、残留旋流和波前宽度。默认 3 m / 0.65 s / 强度 1 / 宽度 0.45 m。过短持续时间会按 8 m/s 的峰值冲击速度自动延长。浓雾波前可在原有 FogVolume 范围内增高，不改变普通雾层的高度。
 
 ## 复用与接口
 
@@ -80,11 +93,11 @@ flowchart TD
 # 注入一次速度冲量：位置、半径、XZ 速度增量、旋转速度增量。
 $FogField.disturb(Vector3(0, 0, 2), 1.2, Vector2(2, 0), 1.5)
 
-# 短时偏心卷流：位置、范围、持续时间、方向冲量、旋转冲量。
-$FogField.burst(Vector3(0, 0, 2), 2.5, 0.45, 4.0, 3.0)
+# 径向扩散：位置、范围、持续时间、强度倍率、残留旋流、波前宽度。
+$FogField.burst(Vector3(0, 0, 2), 3.0, 0.65, 1.0, 1.5, 0.45)
 ```
 
-`get_state_texture()` 返回固定展示纹理：R 密度、GB 单元中心速度、A 保留。场图直接采样它显示密度与速度箭头，无运行时 GPU 回读。`get_coordinate_texture()` 返回两组持久坐标；`get_diagnostics_texture()` 的 R/G/B 分别为投影后散度、涡量、投影前散度。
+`get_state_texture()` 返回固定展示纹理：R 密度、GB 单元中心速度、A 保留。冲击期间 GB 包含常规流动与冲击速度，场图直接采样它显示密度与速度箭头，无运行时 GPU 回读。`get_coordinate_texture()` 返回两组持久坐标；`get_diagnostics_texture()` 的 R/G/B 分别为常规速度的投影后散度、涡量、投影前散度，不包含有意保留散度的冲击分量。
 
 ## 文件
 
@@ -93,6 +106,7 @@ $FogField.burst(Vector3(0, 0, 2), 2.5, 0.45, 4.0, 3.0)
 - `fog/shaders/fluid_common.glslinc`：共享布局、MAC 采样、回溯与密度重建。
 - `velocity / divergence / pressure / project_velocity.glsl`：速度与压力求解。
 - `density_predict / simulate.glsl`：密度预测校正与材质坐标搬运。
+- `shock_field / shock_transport.glsl`：带障碍遮挡的径向场与有限体积压缩/膨胀搬运。
 - `build_obstacles.glsl`：几何变化时重建距离与法线。
 - `ground_fog.gdshader`：从共享状态重建三维外观。
 - `demo/`：角色、相机、灯光、笔刷和场图。
@@ -107,6 +121,7 @@ $FogField.burst(Vector3(0, 0, 2), 2.5, 0.45, 4.0, 3.0)
 ```powershell
 godot --headless --editor --path . --import --quit
 godot --path . --fixed-fps 60 --script res://tests/flow_transport.gd
+godot --path . --fixed-fps 60 --script res://tests/flow_expansion.gd
 godot --path . --script res://tests/gpu_smoke.gd
 godot --path . --fixed-fps 60 --script res://tests/field_map.gd
 godot --path . --fixed-fps 60 --script res://tests/fog_detail.gd
@@ -116,23 +131,32 @@ godot --editor --path . -- --fog-editor-smoke
 godot --path . --script res://tests/flow_budget.gd
 godot --path . --script res://tests/flow_budget.gd -- --close
 godot --path . --script res://tests/flow_budget.gd -- --flow-only
+godot --path . --script res://tests/flow_budget.gd -- --close --burst
 
 # 固定步动态捕捉，105 帧 / 15 FPS / 7 秒。
 godot --path . --fixed-fps 60 --script res://tests/flow_capture.gd
 ffmpeg -framerate 15 -i artifacts/flow-transport/frames/%03d.png -c:v libx264 -crf 18 -pix_fmt yuv420p artifacts/flow-transport/interaction.mp4
+
+# 真实 Space 输入的扩散与随后尾流：120 帧 / 15 FPS / 8 秒。
+godot --path . --fixed-fps 60 --script res://tests/expansion_capture.gd
+ffmpeg -framerate 15 -i artifacts/expansion/frames/%03d.png -c:v libx264 -crf 18 -pix_fmt yuv420p artifacts/expansion/expansion.mp4
 ```
 
 轨迹验收比较已知 1 m 风位移的密度与材质坐标，检查局部标记的位移、松手后的历史、密度范围、近似雾量保持、压力残差、暂停、障碍更新、重复坐标刷新和重置确定性。它不把“参数造成像素差”当成交互正确的证据。
+
+扩散验收另行检查中心稀释、波前半径增长、浓度超过基准、总雾量误差、材质标记共同位移、空区二次冲击、30/60 Hz 一致性、暂停重置、隔墙遮挡、重叠上限、开放边界及实际 Space 输入。
 
 `artifacts/flow-transport/` 保存密度前后图、动态预览、1080p 截图和预算 JSON。PNG 序列与日志不提交。`artifacts/fog-detail/` 保存静态远近景检查与改动前参考；新的外观判断应同时看动态预览。
 
 本轮验证环境为 Windows / Godot 4.7.2 / D3D12 Forward+ / RTX 3050 Ti Laptop。预算报告记录整帧墙钟间隔和单视口 GPU 渲染时间；后者不单独代表流体计算耗时。关闭体积雾的对照保留流体与其余场景，用于粗略区分成本。
 
-最终 288 / 192 体积采样下，1080p 近景两次连续复测的 P95 为 15.365 / 14.963 ms，最慢帧为 16.659 / 16.569 ms。每次先预热 2 秒模拟时间，再持续采样约 5 秒，笔刷沿固定轨迹持续推雾。对应报告为 `budget-full-close-repeat1.json`、`budget-full-close-repeat2.json`。轨迹、渲染、场图、GPU 集成及编辑器验收共 75 项检查通过；轨迹测试还覆盖 30 秒静置历史和真实移动交互器。
+共享流场重构提交 `16e85bc` 的 288 / 192 体积采样下，1080p 近景两次连续复测的 P95 为 15.365 / 14.963 ms，最慢帧为 16.659 / 16.569 ms。每次先预热 2 秒模拟时间，再持续采样约 5 秒，笔刷沿固定轨迹持续推雾。对应报告为 `budget-full-close-repeat1.json`、`budget-full-close-repeat2.json`。该提交的轨迹、渲染、场图、GPU 集成及编辑器验收共 75 项检查通过；新增扩散结果见 `budget-full-close-burst.json` 及扩散验收输出。
+
+径向扩散版本共通过 93 项检查，其中新增 18 项扩散回归。最终配置在相同机器上的 1080p 近景持续拖动、每 1.5 秒释放一次扩散，预热 2 秒后测量约 5 秒：整帧中位数 10.684 ms，P95 14.302 ms，最慢帧 15.154 ms。报告包含该场景和采样条件，不能据此保证所有窗口、设备或四重同时冲击都达到相同帧率。动态预览为 `artifacts/expansion/expansion.mp4`。
 
 ## 成本与限制
 
-默认 256² 速度 / 512² 密度的模拟纹理约 24.5 MiB，另有噪声、体积雾 froxel、阴影及引擎资源。所有计算留在主 RenderingDevice；CPU 只提交少量参数，无每帧 readback、submit 或 sync。最多 32 个障碍、单步 16 个作用。
+默认 256² 速度 / 512² 密度的模拟纹理约 23.5 MiB，另有噪声、体积雾 froxel、阴影及引擎资源。所有计算留在主 RenderingDevice；CPU 只提交少量参数，无每帧 readback、submit 或 sync。最多 32 个障碍、单步 16 个作用和同时 4 个冲击。
 
 项目体积雾为 Volume Size 288 / Depth 192、关闭空间滤波，时间重投影为 0.75。连续复测时 320 的近景 P95 曾达到 17.3 ms，因此只小幅降低体积横向采样，保留速度和密度精度。这些选项明显影响细节、闪烁和拖影。近景细丝受最终 froxel 分辨率限制；加密二维场无法单独突破渲染采样上限。需要省性能时先降低 Volume Size / Depth 或减少参与雾的动态灯，再按目标涡尺度调整速度分辨率。
 

@@ -80,6 +80,12 @@ extends Resource
 		vorticity_strength = clampf(value, 0.0, 5.0)
 		emit_changed()
 
+@export_group("径向冲击")
+## 冲击波的密度安全上限；达到上限会损失部分雾量，避免极端重叠冲击无限堆积。
+@export_range(2.0, 32.0, 0.1) var max_compressed_density := 16.0:
+	set(value):
+		max_compressed_density = clampf(value, 2.0, 32.0)
+		emit_changed()
 @export_group("雾的外观")
 ## 雾体最大高度。主密度决定局部高度，三维噪声只补充纵向层次。
 @export_range(0.2, 4.0, 0.05, "suffix:m") var thickness := 0.85:

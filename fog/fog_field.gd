@@ -37,6 +37,7 @@ var _previous_domain := Vector4(INF, INF, INF, INF)
 var _interactor_positions: Dictionary = {}
 var _pending_impulses: Array[PackedFloat32Array] = []
 var _active_bursts: Array[FogBurst] = []
+var _expansions := PackedFloat32Array()
 var _warned_obstacle_limit := false
 var _warned_stamp_limit := false
 var _last_global_position := Vector3(INF, INF, INF)
@@ -125,6 +126,7 @@ func reset_simulation() -> void:
 	_interactor_positions.clear()
 	_pending_impulses.clear()
 	_active_bursts.clear()
+	_expansions.clear()
 
 
 ## 注入一次速度冲量；雾量由同一速度场搬运，不直接清除密度或指定浓雾环。
@@ -138,12 +140,12 @@ func disturb(world_position: Vector3, radius: float, velocity := Vector2.ZERO,
 	]))
 
 
-## 短时不规则卷流；方向与偏心旋涡避免纯径向势力被不可压缩投影抵消。
-func burst(world_position: Vector3, radius: float, duration := 0.45,
-		strength := 5.0, swirl := 2.0) -> void:
-	if _pending_impulses.size() + _active_bursts.size() >= FogSimulationGPU.MAX_STAMPS:
+## 径向扩散：推开中心、在移动波前压缩雾量，保留同一密度和材质坐标的历史。
+func burst(world_position: Vector3, radius: float, duration := 0.65,
+		strength := 1.0, swirl := 1.5, rim_width := 0.45) -> void:
+	if _active_bursts.size() >= FogSimulationGPU.MAX_BURSTS or _pending_impulses.size() + _active_bursts.size() >= FogSimulationGPU.MAX_STAMPS:
 		return
-	_active_bursts.append(FogBurst.new(world_position, radius, duration, strength, swirl))
+	_active_bursts.append(FogBurst.new(world_position, radius, duration, strength, swirl, rim_width))
 
 
 func get_coordinate_texture() -> Texture2D:
@@ -168,6 +170,7 @@ func get_simulation_time() -> float:
 
 func _advance_simulation(step: float) -> void:
 	var obstacles := _collect_obstacles()
+	_expansions.clear()
 	var stamps := _collect_stamps(step) if step > 0.0 else PackedFloat32Array()
 	var domain := Vector4(settings.area_size.x, settings.area_size.y, global_position.x, global_position.z)
 	var reset := _needs_reset or domain != _previous_domain
@@ -184,9 +187,9 @@ func _advance_simulation(step: float) -> void:
 		float(obstacles.size()) / 8.0, float(stamps.size()) / FogSimulationGPU.STAMP_FLOAT_COUNT,
 		1.0 if reset else 0.0, float(_resolution),
 		settings.density_variation, settings.density_pattern_scale, settings.detail_reset_period, 0.0,
-		settings.vorticity_strength, 0.0, 0.0, 0.0,
+		settings.vorticity_strength, float(_expansions.size()) / FogSimulationGPU.SHOCK_FLOAT_COUNT, 0.0, settings.max_compressed_density,
 	])
-	_simulation.advance(parameters, stamps, obstacles, rebuild, settings.pressure_iterations)
+	_simulation.advance(parameters, stamps, obstacles, rebuild, settings.pressure_iterations, _expansions)
 	_render_material.set_shader_parameter("simulation_time", _simulation_time)
 	_needs_reset = false
 
@@ -219,6 +222,7 @@ func _collect_stamps(step: float) -> PackedFloat32Array:
 	var ongoing_bursts: Array[FogBurst] = []
 	for wave in _active_bursts:
 		data.append_array(wave.advance(step))
+		_expansions.append_array(wave.pack_expansion())
 		if not wave.is_finished():
 			ongoing_bursts.append(wave)
 	_active_bursts = ongoing_bursts

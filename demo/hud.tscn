@@ -244,7 +244,7 @@ mouse_filter = 2
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
 text = "WASD / arrows  move     Shift  sprint
-Left drag  stir fog     Space  vortex at cursor
+Left drag  stir fog     Space  expand fog at cursor
 Right drag  orbit     Wheel  zoom
 R  reset     P  pause     Tab  field view"
 

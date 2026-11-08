@@ -1,0 +1,13 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://j5at6k4g6lbg"
+path="res://.godot/imported/shock_transport.glsl-410b2908c4852cc7ca67f7e838c4dc83.res"
+
+[deps]
+
+source_file="res://fog/shaders/shock_transport.glsl"
+dest_files=["res://.godot/imported/shock_transport.glsl-410b2908c4852cc7ca67f7e838c4dc83.res"]
+
+[params]

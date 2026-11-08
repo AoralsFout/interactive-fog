@@ -43,8 +43,10 @@ void fog() {
 	float blend=1.0-abs(fract(simulation_time/detail_reset_period)*2.0-1.0);
 	float noise=mix(volume_detail(coordinates.zw,local.y),volume_detail(coordinates.xy,local.y),blend);
 	float detail=mix(1.0,mix(0.55,1.25,noise),detail_amount);
-	float shaped=pow(max(amount,0.0),mix(1.0,1.65,detail_sharpness));
+	float excess=max(amount-1.0,0.0);
+	float shaped=pow(clamp(amount,0.0,1.0),mix(1.0,1.65,detail_sharpness))+excess/(1.0+excess*0.35);
 	float local_height=thickness*mix(0.4,0.75,noise);
+	local_height=mix(local_height,thickness*0.95,smoothstep(1.0,3.0,amount));
 	float height=clamp(local.y/max(local_height,0.001),0.0,1.0);
 	float vertical=exp(-height*height_falloff)*(1.0-smoothstep(0.45,1.0,height));
 	vertical*=step(0.0,local.y)*step(local.y,local_height);

@@ -4,7 +4,7 @@
 layout(local_size_x=8,local_size_y=8,local_size_z=1) in;
 
 layout(set=0,binding=3) uniform sampler2D previous_state;
-layout(rgba16f,set=0,binding=4) uniform writeonly image2D predicted_state;
+layout(r32f,set=0,binding=4) uniform writeonly image2D predicted_state;
 void main() {
     ivec2 id=ivec2(gl_GlobalInvocationID.xy),size=imageSize(predicted_state);
     if(any(greaterThanEqual(id,size))) { return; }

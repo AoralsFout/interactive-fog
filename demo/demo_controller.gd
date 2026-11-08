@@ -9,11 +9,13 @@ extends Node3D
 @export_range(0.2, 5.0, 0.1, "suffix:m") var brush_radius := 1.4
 ## 单击注入偏心卷流；拖动则由笔刷的实际世界速度持续施力。
 @export_range(0.0, 8.0, 0.1) var brush_click_swirl := 2.0
-@export_group("空格卷流")
-@export_range(0.5, 8.0, 0.1, "suffix:m") var burst_radius := 2.5
-@export_range(0.0, 12.0, 0.1) var burst_speed := 4.0
-@export_range(0.05, 2.0, 0.05, "suffix:s") var burst_duration := 0.45
-@export_range(0.0, 8.0, 0.1) var burst_swirl := 3.0
+@export_group("空格径向扩散")
+@export_range(0.5, 8.0, 0.1, "suffix:m") var burst_radius := 3.0
+@export_range(0.0, 2.0, 0.05) var burst_strength := 1.0
+## 时间过短时会按冲击速度上限自动延长，保持搬运稳定。
+@export_range(0.2, 2.0, 0.05, "suffix:s") var burst_duration := 0.65
+@export_range(0.0, 8.0, 0.1) var burst_swirl := 1.5
+@export_range(0.08, 1.5, 0.05, "suffix:m") var burst_rim_width := 0.45
 
 @onready var _field := get_node(fog_field_path) as InteractiveFogField
 @onready var _camera := get_node(camera_path) as Camera3D
@@ -61,7 +63,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_field.disturb(_brush.global_position, brush_radius, Vector2.ZERO, brush_click_swirl)
 	elif event.is_action_pressed("fog_burst"):
 		var position_for_burst := _brush.global_position if _valid_brush else _player.global_position
-		_field.burst(position_for_burst, burst_radius, burst_duration, burst_speed, burst_swirl)
+		_field.burst(position_for_burst, burst_radius, burst_duration, burst_strength, burst_swirl, burst_rim_width)
 	elif event.is_action_pressed("fog_reset"):
 		_field.reset_simulation()
 	elif event.is_action_pressed("fog_pause"):

@@ -33,6 +33,8 @@ func _run() -> void:
 	interactor.enabled = true
 	var flow_only := "--flow-only" in OS.get_cmdline_user_args()
 	var close := "--close" in OS.get_cmdline_user_args()
+	var expansion := "--burst" in OS.get_cmdline_user_args()
+	var next_wave := 0.25
 	if close:
 		var rig := _demo.get_node("CameraRig") as FogDemoOrbitCamera
 		rig.distance = 15.0
@@ -47,6 +49,9 @@ func _run() -> void:
 	var index := 0
 	while sample_start == 0 or Time.get_ticks_usec() - sample_start < 5000000:
 		var t := field.get_simulation_time()
+		if expansion and t >= next_wave:
+			field.burst(Vector3(0.0, 0.0, 1.0), 3.0)
+			next_wave += 1.5
 		brush.position = Vector3(sin(t * 0.9) * 3.5, 0.05, 1.0 + cos(t * 1.1) * 2.0)
 		await process_frame
 		await RenderingServer.frame_post_draw
@@ -63,6 +68,7 @@ func _run() -> void:
 	var report := {
 		"resolution": [1920, 1080], "flow_only": flow_only,
 		"camera": "close" if close else "wide",
+		"expansion": expansion,
 		"godot": Engine.get_version_info().string,
 		"adapter": RenderingServer.get_video_adapter_name(),
 		"volume_size": ProjectSettings.get_setting("rendering/environment/volumetric_fog/volume_size"),
@@ -81,6 +87,8 @@ func _run() -> void:
 	var label := "flow-only" if flow_only else "full"
 	if close:
 		label += "-close"
+	if expansion:
+		label += "-burst"
 	var file := FileAccess.open(OUTPUT + "budget-" + label + ".json", FileAccess.WRITE)
 	file.store_string(JSON.stringify(report, "\t"))
 	_viewport.get_texture().get_image().save_png(OUTPUT + "budget-" + label + ".png")

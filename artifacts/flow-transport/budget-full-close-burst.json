@@ -1,0 +1,24 @@
+{
+	"adapter": "NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+	"camera": "close",
+	"density_resolution": 512,
+	"elapsed_process_frames": 617,
+	"expansion": true,
+	"flow_only": false,
+	"godot": "4.7.2-stable (official)",
+	"max_frame_ms": 15.154,
+	"median_frame_ms": 10.684,
+	"median_viewport_gpu_ms": 9.7209997177124,
+	"p95_frame_ms": 14.302,
+	"p99_frame_ms": 14.688,
+	"resolution": [
+		1920,
+		1080
+	],
+	"sample_elapsed_seconds": 5.002933,
+	"samples": 448,
+	"simulation_time": 6.99999999999998,
+	"velocity_resolution": 256,
+	"volume_depth": 192,
+	"volume_size": 288
+}

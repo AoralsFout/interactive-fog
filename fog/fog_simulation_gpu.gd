@@ -7,6 +7,9 @@ extends RefCounted
 const MAX_OBSTACLES := 32
 const MAX_STAMPS := 16
 const STAMP_FLOAT_COUNT := 8
+const MAX_BURSTS := 4
+const SHOCK_FLOAT_COUNT := 8
+const MAX_SHOCK_SUBSTEPS := 64
 const PARAMETER_BYTES := 7 * 16
 const SHADERS := {
 	"obstacles": preload("res://fog/shaders/build_obstacles.glsl"),
@@ -16,6 +19,8 @@ const SHADERS := {
 	"project": preload("res://fog/shaders/project_velocity.glsl"),
 	"predict": preload("res://fog/shaders/density_predict.glsl"),
 	"transport": preload("res://fog/shaders/simulate.glsl"),
+	"shock_field": preload("res://fog/shaders/shock_field.glsl"),
+	"shock_transport": preload("res://fog/shaders/shock_transport.glsl"),
 }
 
 var state_texture := Texture2DRD.new()
@@ -35,6 +40,8 @@ var _coordinates: Array[RID] = []
 var _pressures: Array[RID] = []
 var _parameters := RID()
 var _stamps := RID()
+var _shocks := RID()
+var _shock_velocity := RID()
 var _obstacles := RID()
 var _sampler := RID()
 var _mask := RID()
@@ -55,9 +62,9 @@ func start(resolution: int, density_resolution: int) -> void:
 
 
 func advance(parameters: PackedFloat32Array, stamps: PackedFloat32Array,
-		obstacles: PackedFloat32Array, rebuild: bool, iterations: int) -> void:
+		obstacles: PackedFloat32Array, rebuild: bool, iterations: int, shocks: PackedFloat32Array) -> void:
 	RenderingServer.call_on_render_thread(_advance.bind(
-		parameters.to_byte_array(), stamps.to_byte_array(), obstacles.to_byte_array(), rebuild, iterations))
+		parameters.to_byte_array(), stamps.to_byte_array(), obstacles.to_byte_array(), rebuild, iterations, shocks.to_byte_array()))
 
 
 func shutdown() -> void:
@@ -117,7 +124,13 @@ func _initialize(resolution: int, density_resolution: int) -> void:
 	_density_resolution = density_resolution
 	for stage in SHADERS:
 		var shader_file: RDShaderFile = SHADERS[stage]
-		var shader := _own(_rd.shader_create_from_spirv(shader_file.get_spirv()))
+		var spirv := shader_file.get_spirv()
+		var compile_error := spirv.get_stage_compile_error(RenderingDevice.SHADER_STAGE_COMPUTE)
+		if not compile_error.is_empty():
+			push_error("交互雾：" + stage + " 编译失败：" + compile_error)
+			_release()
+			return
+		var shader := _own(_rd.shader_create_from_spirv(spirv))
 		if not shader.is_valid():
 			push_error("交互雾：GPU shader 创建失败：" + stage)
 			_release()
@@ -126,6 +139,7 @@ func _initialize(resolution: int, density_resolution: int) -> void:
 		_pipelines[stage] = _own(_rd.compute_pipeline_create(shader))
 	_parameters = _own(_rd.storage_buffer_create(PARAMETER_BYTES))
 	_stamps = _own(_rd.storage_buffer_create(MAX_STAMPS * STAMP_FLOAT_COUNT * 4))
+	_shocks = _own(_rd.storage_buffer_create(MAX_BURSTS * SHOCK_FLOAT_COUNT * 4))
 	_obstacles = _own(_rd.storage_buffer_create(MAX_OBSTACLES * 32))
 	var sampler := RDSamplerState.new()
 	sampler.mag_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
@@ -138,11 +152,13 @@ func _initialize(resolution: int, density_resolution: int) -> void:
 	_working_velocity = _texture(_resolution)
 	_before_projection = _texture(_resolution)
 	_after_projection = _texture(_resolution)
-	_predicted = _texture(_density_resolution)
+	# 密度内部使用单通道 32 位，避免冲击的多个守恒子步反复量化到半精度。
+	_predicted = _texture(_density_resolution, RenderingDevice.DATA_FORMAT_R32_SFLOAT)
+	_shock_velocity = _texture(_density_resolution)
 	_display = _texture(_density_resolution)
 	_display_coordinates = _texture(_density_resolution, RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT)
 	for index in range(2):
-		_states.append(_texture(_density_resolution))
+		_states.append(_texture(_density_resolution, RenderingDevice.DATA_FORMAT_R32_SFLOAT))
 		_coordinates.append(_texture(_density_resolution, RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT))
 		_pressures.append(_texture(_resolution, RenderingDevice.DATA_FORMAT_R32_SFLOAT))
 
@@ -156,6 +172,9 @@ func _initialize(resolution: int, density_resolution: int) -> void:
 	uniforms = _common(_velocity)
 	uniforms.append_array([_image(3, _after_projection), _sample(4, _before_projection)])
 	_sets["diagnostics"] = _make_set("divergence", uniforms)
+	uniforms = _common(_velocity)
+	uniforms.append_array([_buffer(3, _shocks), _image(4, _shock_velocity)])
+	_sets["shock_field"] = _make_set("shock_field", uniforms)
 	for index in range(2):
 		uniforms = _common(_working_velocity)
 		uniforms.append_array([_sample(3, _before_projection), _sample(4, _pressures[index]), _image(5, _pressures[1 - index])])
@@ -172,6 +191,12 @@ func _initialize(resolution: int, density_resolution: int) -> void:
 			_image(6, _states[1 - index]), _image(7, _coordinates[1 - index]),
 			_image(8, _display), _image(9, _display_coordinates)])
 		_sets["transport%d" % index] = _make_set("transport", uniforms)
+		uniforms = _common(_shock_velocity)
+		uniforms.append_array([
+			_sample(3, _states[index]), _sample(4, _coordinates[index]),
+			_image(5, _states[1 - index]), _image(6, _coordinates[1 - index]),
+			_image(7, _display), _image(8, _display_coordinates)])
+		_sets["shock_transport%d" % index] = _make_set("shock_transport", uniforms)
 	for rid in _resources:
 		if not rid.is_valid():
 			push_error("交互雾：流体资源或 uniform set 创建失败。")
@@ -184,20 +209,34 @@ func _initialize(resolution: int, density_resolution: int) -> void:
 	_ready_on_gpu = true
 
 
-func _dispatch(list: int, stage: String, uniform_set: RID, size: int) -> void:
+func _dispatch(list: int, stage: String, uniform_set: RID, size: int, push := PackedByteArray()) -> void:
 	_rd.compute_list_bind_compute_pipeline(list, _pipelines[stage])
 	_rd.compute_list_bind_uniform_set(list, uniform_set, 0)
+	if not push.is_empty():
+		_rd.compute_list_set_push_constant(list, push, push.size())
 	_rd.compute_list_dispatch(list, ceili(float(size) / 8.0), ceili(float(size) / 8.0), 1)
 	_rd.compute_list_add_barrier(list)
 
 
 func _advance(parameters: PackedByteArray, stamps: PackedByteArray,
-		obstacles: PackedByteArray, rebuild: bool, iterations: int) -> void:
+		obstacles: PackedByteArray, rebuild: bool, iterations: int, shocks: PackedByteArray) -> void:
 	if not _ready_on_gpu:
 		return
+	var peak := 0.0
+	for offset in range(0, shocks.size(), SHOCK_FLOAT_COUNT * 4):
+		peak += absf(shocks.decode_float(offset + 12))
+	var dt := parameters.decode_float(32)
+	var cell := minf(parameters.decode_float(0), parameters.decode_float(4)) / _density_resolution
+	# 两个 MAC 面分量可能在不同位置取到峰值，用逐轴上界约束 CFL。
+	var desired_steps := maxi(1, ceili(dt * peak * 2.0 / (cell * 0.4)))
+	var substeps := mini(desired_steps, MAX_SHOCK_SUBSTEPS)
+	# 保持 CFL 安全；极端重叠或很小区域时削弱冲击，而不是提交无界 GPU 子步。
+	parameters.encode_float(104, minf(1.0, float(substeps) / desired_steps))
 	_rd.buffer_update(_parameters, 0, parameters.size(), parameters)
 	if not stamps.is_empty():
 		_rd.buffer_update(_stamps, 0, stamps.size(), stamps)
+	if not shocks.is_empty():
+		_rd.buffer_update(_shocks, 0, shocks.size(), shocks)
 	if rebuild and not obstacles.is_empty():
 		_rd.buffer_update(_obstacles, 0, obstacles.size(), obstacles)
 	if parameters.decode_float(72) > 0.5:
@@ -217,8 +256,17 @@ func _advance(parameters: PackedByteArray, stamps: PackedByteArray,
 	_dispatch(list, "divergence", _sets["diagnostics"], _resolution)
 	_dispatch(list, "predict", _sets["predict%d" % _read], _density_resolution)
 	_dispatch(list, "transport", _sets["transport%d" % _read], _density_resolution)
-	_rd.compute_list_end()
 	_read = 1 - _read
+	if peak > 0.000001 and dt > 0.0:
+		_dispatch(list, "shock_field", _sets["shock_field"], _density_resolution)
+		var push := PackedByteArray()
+		push.resize(16)
+		push.encode_float(0, dt / substeps)
+		for index in range(substeps):
+			push.encode_s32(4, 1 if index == substeps - 1 else 0)
+			_dispatch(list, "shock_transport", _sets["shock_transport%d" % _read], _density_resolution, push)
+			_read = 1 - _read
+	_rd.compute_list_end()
 
 
 func _release() -> void:

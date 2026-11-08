@@ -7,7 +7,7 @@ layout(local_size_x=8,local_size_y=8,local_size_z=1) in;
 layout(set=0,binding=3) uniform sampler2D previous_state;
 layout(set=0,binding=4) uniform sampler2D predicted_state;
 layout(set=0,binding=5) uniform sampler2D previous_coordinates;
-layout(rgba16f,set=0,binding=6) uniform writeonly image2D next_state;
+layout(r32f,set=0,binding=6) uniform writeonly image2D next_state;
 layout(rgba32f,set=0,binding=7) uniform writeonly image2D next_coordinates;
 layout(rgba16f,set=0,binding=8) uniform writeonly image2D display_state;
 layout(rgba32f,set=0,binding=9) uniform writeonly image2D display_coordinates;
