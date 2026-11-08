@@ -35,6 +35,8 @@ var _simulation_time := 0.0
 var _previous_obstacles := PackedFloat32Array()
 var _previous_domain := Vector4(INF, INF, INF, INF)
 var _interactor_positions: Dictionary = {}
+var _cut_positions: Dictionary = {}
+var _active_cuts: Array[FogCut] = []
 var _pending_impulses: Array[PackedFloat32Array] = []
 var _active_bursts: Array[FogBurst] = []
 var _expansions := PackedFloat32Array()
@@ -85,6 +87,7 @@ func _process(delta: float) -> void:
 	if not playing and not _needs_reset:
 		# 暂停期间仍跟踪交互器，恢复时不会把静止期间的位移误当成巨大速度。
 		_interactor_positions.clear()
+		_cut_positions.clear()
 		var domain := Vector4(settings.area_size.x, settings.area_size.y, global_position.x, global_position.z)
 		if _collect_obstacles() != _previous_obstacles or domain != _previous_domain:
 			# 暂停只冻结流动，移动障碍或调整区域仍应立刻更新静态遮罩。
@@ -124,6 +127,8 @@ func reset_simulation() -> void:
 	_previous_obstacles.clear()
 	_previous_domain = Vector4(INF, INF, INF, INF)
 	_interactor_positions.clear()
+	_cut_positions.clear()
+	_active_cuts.clear()
 	_pending_impulses.clear()
 	_active_bursts.clear()
 	_expansions.clear()
@@ -150,6 +155,13 @@ func burst(world_position: Vector3, radius: float, duration := 0.65,
 
 func get_coordinate_texture() -> Texture2D:
 	return _simulation.coordinate_texture if _simulation != null else null
+
+
+## 沿线段把雾拨到两侧；实际密度和材质坐标共享守恒搬运，不擦除路径。
+func part(from: Vector3, to: Vector3, radius := 0.65, speed := 3.0, duration := 0.3) -> void:
+	if _active_cuts.size() >= FogSimulationGPU.MAX_CUT_SEGMENTS:
+		_active_cuts.pop_front()
+	_active_cuts.append(FogCut.new(from, to, radius, speed, duration))
 
 
 func get_diagnostics_texture() -> Texture2D:
@@ -227,6 +239,7 @@ func _collect_stamps(step: float) -> PackedFloat32Array:
 			ongoing_bursts.append(wave)
 	_active_bursts = ongoing_bursts
 	var live_positions: Dictionary = {}
+	var live_cut_positions: Dictionary = {}
 	for node in get_tree().get_nodes_in_group(&"interactive_fog_interactors"):
 		var interactor := node as FogInteractor3D
 		if interactor == null:
@@ -241,6 +254,12 @@ func _collect_stamps(step: float) -> PackedFloat32Array:
 			continue
 		if interactor.vertical_reach >= 0.0 and absf(position_now.y - global_position.y) > settings.get_volume_height() + interactor.vertical_reach:
 			continue
+		if interactor.mode == FogInteractor3D.Mode.PART:
+			var cut_previous: Vector3 = _cut_positions.get(id, position_now)
+			live_cut_positions[id] = position_now
+			if _cut_positions.has(id) and (position_now.distance_to(cut_previous) > interactor.minimum_speed * step or interactor.emit_when_stationary):
+				part(cut_previous, position_now, interactor.radius, interactor.part_speed, interactor.part_duration)
+			continue
 		if not interactor.emit_when_stationary and velocity.length() < interactor.minimum_speed:
 			continue
 		if data.size() >= FogSimulationGPU.MAX_STAMPS * FogSimulationGPU.STAMP_FLOAT_COUNT:
@@ -250,6 +269,13 @@ func _collect_stamps(step: float) -> PackedFloat32Array:
 			continue
 		data.append_array(interactor.pack_gpu_stamp(velocity.limit_length(settings.max_speed * 2.0)))
 	_interactor_positions = live_positions
+	_cut_positions = live_cut_positions
+	var ongoing_cuts: Array[FogCut] = []
+	for cut in _active_cuts:
+		_expansions.append_array(cut.advance(step))
+		if not cut.is_finished():
+			ongoing_cuts.append(cut)
+	_active_cuts = ongoing_cuts
 	return data
 
 

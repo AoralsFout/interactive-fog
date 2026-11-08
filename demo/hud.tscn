@@ -62,6 +62,8 @@ shader_parameter/arrow_min_speed = 0.04
 shader_parameter/arrow_line_width = 1.2
 shader_parameter/arrow_color = Color(0.96, 0.98, 0.95, 1)
 
+[sub_resource type="ButtonGroup" id="Group_brush"]
+
 [node name="HUD" type="CanvasLayer" unique_id=1125684060]
 script = ExtResource("2")
 field_map_width = 520.0
@@ -101,10 +103,35 @@ theme_override_colors/font_color = Color(0.9, 0.96, 0.96, 1)
 theme_override_font_sizes/font_size = 29
 text = "Interactive fog"
 
-[node name="Subtitle" type="Label" parent="Layout/ControlsPanel/Content" unique_id=1664934641]
+[node name="BrushModes" type="HBoxContainer" parent="Layout/ControlsPanel/Content"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 13
-text = "Stir it. Follow the flow."
+theme_override_constants/separation = 8
+
+[node name="StirButton" type="Button" parent="Layout/ControlsPanel/Content/BrushModes"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+button_pressed = true
+button_group = SubResource("Group_brush")
+text = "搅动"
+tooltip_text = "左键搅动雾气；M 切换工具"
+
+[node name="PartButton" type="Button" parent="Layout/ControlsPanel/Content/BrushModes"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+button_group = SubResource("Group_brush")
+text = "划开"
+tooltip_text = "左键沿路径拨开雾气；M 切换工具"
+
+[node name="Shortcut" type="Label" parent="Layout/ControlsPanel/Content/BrushModes"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "M 切换"
 
 [node name="Separator" type="HSeparator" parent="Layout/ControlsPanel/Content" unique_id=802339478]
 layout_mode = 2
@@ -230,11 +257,12 @@ theme_override_font_sizes/font_size = 12
 text = "GPU field initializing..."
 
 [node name="HelpPanel" type="PanelContainer" parent="Layout" unique_id=1882447979]
+unique_name_in_owner = true
 layout_mode = 0
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 24.0
-offset_top = -116.0
+offset_top = -140.0
 offset_right = 440.0
 offset_bottom = -24.0
 grow_vertical = 0
@@ -244,7 +272,8 @@ mouse_filter = 2
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
 text = "WASD / arrows  move     Shift  sprint
-Left drag  stir fog     Space  expand fog at cursor
+Left drag  selected tool     M  switch tool
+Space  expand fog at cursor
 Right drag  orbit     Wheel  zoom
 R  reset     P  pause     Tab  field view"
 

@@ -34,6 +34,15 @@ func _run() -> void:
 	var flow_only := "--flow-only" in OS.get_cmdline_user_args()
 	var close := "--close" in OS.get_cmdline_user_args()
 	var expansion := "--burst" in OS.get_cmdline_user_args()
+	var parting := "--part" in OS.get_cmdline_user_args()
+	var no_obstacles := "--no-obstacles" in OS.get_cmdline_user_args()
+	if no_obstacles:
+		for obstacle in _demo.get_node("Obstacles").get_children():
+			if obstacle is FogObstacle3D:
+				obstacle.enabled = false
+	if parting:
+		_demo.set_brush_mode(1)
+		interactor.enabled = true
 	var next_wave := 0.25
 	if close:
 		var rig := _demo.get_node("CameraRig") as FogDemoOrbitCamera
@@ -47,6 +56,7 @@ func _run() -> void:
 	var last := Time.get_ticks_usec()
 	var sample_start := 0
 	var index := 0
+	var max_cut_segments := 0
 	while sample_start == 0 or Time.get_ticks_usec() - sample_start < 5000000:
 		var t := field.get_simulation_time()
 		if expansion and t >= next_wave:
@@ -56,6 +66,7 @@ func _run() -> void:
 		await process_frame
 		await RenderingServer.frame_post_draw
 		var now := Time.get_ticks_usec()
+		max_cut_segments = maxi(max_cut_segments, field.get("_active_cuts").size())
 		if field.get_simulation_time() >= 2.0:
 			if sample_start == 0:
 				sample_start = now
@@ -69,6 +80,9 @@ func _run() -> void:
 		"resolution": [1920, 1080], "flow_only": flow_only,
 		"camera": "close" if close else "wide",
 		"expansion": expansion,
+		"parting": parting,
+		"obstacles_disabled": no_obstacles,
+		"max_cut_segments": max_cut_segments,
 		"godot": Engine.get_version_info().string,
 		"adapter": RenderingServer.get_video_adapter_name(),
 		"volume_size": ProjectSettings.get_setting("rendering/environment/volumetric_fog/volume_size"),
@@ -89,10 +103,18 @@ func _run() -> void:
 		label += "-close"
 	if expansion:
 		label += "-burst"
+	if parting:
+		label += "-part"
+	if no_obstacles:
+		label += "-no-obstacles"
 	var file := FileAccess.open(OUTPUT + "budget-" + label + ".json", FileAccess.WRITE)
 	file.store_string(JSON.stringify(report, "\t"))
 	_viewport.get_texture().get_image().save_png(OUTPUT + "budget-" + label + ".png")
 	print("FLOW_BUDGET ", JSON.stringify(report))
+	if parting and max_cut_segments == 0:
+		push_error("Parting benchmark did not submit any cut segments.")
+		quit(1)
+		return
 	_demo.queue_free()
 	await process_frame
 	_viewport.queue_free()

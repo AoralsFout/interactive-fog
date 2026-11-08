@@ -11,8 +11,9 @@ Godot 4.7 / Forward+ 的浅层交互雾。二维流体负责水平运动，主�
 | 输入 | 行为 |
 | --- | --- |
 | WASD / 方向键、Shift | 角色移动、加速，推动雾并留下尾流 |
-| 左键拖动 | 根据笔刷的实际世界速度向流场施力 |
-| 左键单击 | 注入小旋涡；按住静止时不持续擦除雾 |
+| 左键拖动 | 搅动：推动和卷动；划开：沿路径把雾拨向两侧 |
+| 左键单击 | 搅动时注入小旋涡；划开时拨出局部缺口 |
+| M / 面板工具按钮 | 切换“搅动”和“划开”；默认搅动 |
 | Space | 从鼠标位置径向推开雾，在移动波前堆积并留下卷曲尾流 |
 | 右键拖动、滚轮 | 环绕相机、缩放 |
 | R / P / Tab | 重置 / 暂停 / 二维场图 |
@@ -51,6 +52,12 @@ flowchart TD
 冲击密度使用 MC 限制斜率重建与通量差更新，子步按 CFL 0.4 自动细分。内部密度和预测纹理为单通道 R32F，避免多子步反复量化；对渲染与场图的展示接口仍为 RGBA16F。正常流动仍走原有的高阶 MacCormack 搬运。冲击还向常规流场注入少量旋流，使波前在冲击结束后继续变形。
 
 最多同时处理 4 个冲击，每主时间步最多 64 个冲击子步。极小区域、高分辨率或极端重叠触及子步上限时，会按 CFL 约束削弱冲击速度。密度安全上限默认为 16，达到上限时会损失部分雾量；常规参数下的单次均匀雾扩散验收，二维密度积分误差约 0.003%。原理参考：[Clawpack 的有限体积与通量方法](https://www.clawpack.org/v5.3.x/wp_algorithms.html)。
+
+### 沿路径划开
+
+划开使用覆盖完整拖动线段的短时速度场，把雾拨向路径两侧。它与径向扩散共用有限体积搬运，密度和三维纹理坐标一起移动，不删除雾量。作用结束后保留疏密历史，由原有风和流动继续搬运、自然补位。切换工具、进入面板或松开左键会结束当前笔划，不跨越下一次输入连接路径。
+
+默认半径 0.65 m、峰值速度 3 m/s、作用时间 0.3 s，主场景根节点可调整。最多保留 16 段轨迹，重叠路径取局部最强作用，避免移动缓慢时累加出过大速度。障碍检查只在作用范围内进行；两份状态先同步一次，后续 CFL 子步仅更新范围内的单元，保留区域外状态与原有流动。
 
 ## 参数与编辑器
 
@@ -95,6 +102,9 @@ $FogField.disturb(Vector3(0, 0, 2), 1.2, Vector2(2, 0), 1.5)
 
 # 径向扩散：位置、范围、持续时间、强度倍率、残留旋流、波前宽度。
 $FogField.burst(Vector3(0, 0, 2), 3.0, 0.65, 1.0, 1.5, 0.45)
+
+# 线段拨开：起点、终点、作用半径、峰值速度、持续时间。
+$FogField.part(Vector3(-2, 0, 1), Vector3(2, 0, 1), 0.65, 3.0, 0.3)
 ```
 
 `get_state_texture()` 返回固定展示纹理：R 密度、GB 单元中心速度、A 保留。冲击期间 GB 包含常规流动与冲击速度，场图直接采样它显示密度与速度箭头，无运行时 GPU 回读。`get_coordinate_texture()` 返回两组持久坐标；`get_diagnostics_texture()` 的 R/G/B 分别为常规速度的投影后散度、涡量、投影前散度，不包含有意保留散度的冲击分量。
@@ -106,7 +116,7 @@ $FogField.burst(Vector3(0, 0, 2), 3.0, 0.65, 1.0, 1.5, 0.45)
 - `fog/shaders/fluid_common.glslinc`：共享布局、MAC 采样、回溯与密度重建。
 - `velocity / divergence / pressure / project_velocity.glsl`：速度与压力求解。
 - `density_predict / simulate.glsl`：密度预测校正与材质坐标搬运。
-- `shock_field / shock_transport.glsl`：带障碍遮挡的径向场与有限体积压缩/膨胀搬运。
+- `shock_field / shock_seed / shock_transport.glsl`：扩散与划开速度场、区域外状态同步、局部有限体积搬运。
 - `build_obstacles.glsl`：几何变化时重建距离与法线。
 - `ground_fog.gdshader`：从共享状态重建三维外观。
 - `demo/`：角色、相机、灯光、笔刷和场图。
@@ -122,6 +132,7 @@ $FogField.burst(Vector3(0, 0, 2), 3.0, 0.65, 1.0, 1.5, 0.45)
 godot --headless --editor --path . --import --quit
 godot --path . --fixed-fps 60 --script res://tests/flow_transport.gd
 godot --path . --fixed-fps 60 --script res://tests/flow_expansion.gd
+godot --path . --fixed-fps 60 --script res://tests/flow_part.gd
 godot --path . --script res://tests/gpu_smoke.gd
 godot --path . --fixed-fps 60 --script res://tests/field_map.gd
 godot --path . --fixed-fps 60 --script res://tests/fog_detail.gd
@@ -132,6 +143,7 @@ godot --path . --script res://tests/flow_budget.gd
 godot --path . --script res://tests/flow_budget.gd -- --close
 godot --path . --script res://tests/flow_budget.gd -- --flow-only
 godot --path . --script res://tests/flow_budget.gd -- --close --burst
+godot --path . --script res://tests/flow_budget.gd -- --close --part
 
 # 固定步动态捕捉，105 帧 / 15 FPS / 7 秒。
 godot --path . --fixed-fps 60 --script res://tests/flow_capture.gd
@@ -140,11 +152,17 @@ ffmpeg -framerate 15 -i artifacts/flow-transport/frames/%03d.png -c:v libx264 -c
 # 真实 Space 输入的扩散与随后尾流：120 帧 / 15 FPS / 8 秒。
 godot --path . --fixed-fps 60 --script res://tests/expansion_capture.gd
 ffmpeg -framerate 15 -i artifacts/expansion/frames/%03d.png -c:v libx264 -crf 18 -pix_fmt yuv420p artifacts/expansion/expansion.mp4
+
+# M 切换后实际左键划开，再松手自然演化：120 帧 / 15 FPS / 8 秒。
+godot --path . --fixed-fps 60 --script res://tests/part_capture.gd
+ffmpeg -framerate 15 -i artifacts/part/frames/%03d.png -c:v libx264 -crf 18 -pix_fmt yuv420p artifacts/part/part.mp4
 ```
 
 轨迹验收比较已知 1 m 风位移的密度与材质坐标，检查局部标记的位移、松手后的历史、密度范围、近似雾量保持、压力残差、暂停、障碍更新、重复坐标刷新和重置确定性。它不把“参数造成像素差”当成交互正确的证据。
 
 扩散验收另行检查中心稀释、波前半径增长、浓度超过基准、总雾量误差、材质标记共同位移、空区二次冲击、30/60 Hz 一致性、暂停重置、隔墙遮挡、重叠上限、开放边界及实际 Space 输入。
+
+划开验收检查快速线段的连续缺口、两侧堆积、密度积分、材质标记位移、松手历史、墙体遮挡和自然回填，以及交互器、暂停重置、模式按钮、M 键和左键接线。新增 19 项与已有 93 项检查均通过；均匀雾测试的密度积分误差约 0.0005%。预览位于 `artifacts/part/`。
 
 `artifacts/flow-transport/` 保存密度前后图、动态预览、1080p 截图和预算 JSON。PNG 序列与日志不提交。`artifacts/fog-detail/` 保存静态远近景检查与改动前参考；新的外观判断应同时看动态预览。
 
@@ -154,9 +172,11 @@ ffmpeg -framerate 15 -i artifacts/expansion/frames/%03d.png -c:v libx264 -crf 18
 
 径向扩散版本共通过 93 项检查，其中新增 18 项扩散回归。最终配置在相同机器上的 1080p 近景持续拖动、每 1.5 秒释放一次扩散，预热 2 秒后测量约 5 秒：整帧中位数 10.684 ms，P95 14.302 ms，最慢帧 15.154 ms。报告包含该场景和采样条件，不能据此保证所有窗口、设备或四重同时冲击都达到相同帧率。动态预览为 `artifacts/expansion/expansion.mp4`。
 
+划开模式在同机 1080p 近景持续拖动、最多 8 段同时作用的预算测试中，中位数 10.627 ms、P95 12.368 ms、最慢帧 13.335 ms。条件为预热 2 秒模拟时间后采样约 5 秒；见 `budget-full-close-part.json`，不涵盖任意长线段或多交互器同时划开的最坏情况。
+
 ## 成本与限制
 
-默认 256² 速度 / 512² 密度的模拟纹理约 23.5 MiB，另有噪声、体积雾 froxel、阴影及引擎资源。所有计算留在主 RenderingDevice；CPU 只提交少量参数，无每帧 readback、submit 或 sync。最多 32 个障碍、单步 16 个作用和同时 4 个冲击。
+默认 256² 速度 / 512² 密度的模拟纹理约 23.5 MiB，另有噪声、体积雾 froxel、阴影及引擎资源。所有计算留在主 RenderingDevice；CPU 只提交少量参数，无每帧 readback、submit 或 sync。最多 32 个障碍、单步 16 个常规作用、同时 4 个径向冲击及 16 段划开路径。
 
 项目体积雾为 Volume Size 288 / Depth 192、关闭空间滤波，时间重投影为 0.75。连续复测时 320 的近景 P95 曾达到 17.3 ms，因此只小幅降低体积横向采样，保留速度和密度精度。这些选项明显影响细节、闪烁和拖影。近景细丝受最终 froxel 分辨率限制；加密二维场无法单独突破渲染采样上限。需要省性能时先降低 Volume Size / Depth 或减少参与雾的动态灯，再按目标涡尺度调整速度分辨率。
 

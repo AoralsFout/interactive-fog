@@ -1,5 +1,6 @@
 class_name FogDemoHUD
 extends CanvasLayer
+signal brush_mode_selected(mode: int)
 ## 调参面板独立场景。% 唯一节点引用只在此 HUD 的 owner 范围内解析。
 ## 这些滑块修改本次运行的资源；长期预设请在编辑器的 FogSettings 中保存。
 
@@ -42,6 +43,8 @@ var _connected_settings: FogSettings
 
 
 func _ready() -> void:
+	%StirButton.pressed.connect(_select_brush_mode.bind(0))
+	%PartButton.pressed.connect(_select_brush_mode.bind(1))
 	_field.textures_changed.connect(_bind_debug_textures)
 	_field.settings_replaced.connect(_connect_settings)
 	_connect_settings()
@@ -57,6 +60,8 @@ func _ready() -> void:
 	_sync_controls()
 	_bind_debug_textures()
 	_set_debug_mode(%DebugMode.selected)
+	get_viewport().size_changed.connect(_layout_help)
+	_layout_help()
 
 
 func _process(delta: float) -> void:
@@ -70,6 +75,15 @@ func _process(delta: float) -> void:
 
 func toggle_pause() -> void:
 	%PauseButton.button_pressed = not %PauseButton.button_pressed
+
+
+func _select_brush_mode(mode: int) -> void:
+	brush_mode_selected.emit(mode)
+
+
+func set_brush_mode(mode: int) -> void:
+	%StirButton.set_pressed_no_signal(mode == 0)
+	%PartButton.set_pressed_no_signal(mode == 1)
 
 
 func toggle_debug() -> void:
@@ -133,6 +147,17 @@ func _set_paused(paused: bool) -> void:
 
 func _set_debug_visible(enabled: bool) -> void:
 	%DebugPanel.visible = enabled
+	_layout_help()
+
+
+func _layout_help() -> void:
+	# 矮窗口把帮助移到右下，给新增工具按钮留出空间；场图打开时避免叠在一起。
+	var compact := get_viewport().get_visible_rect().size.y < 700.0
+	%HelpPanel.anchor_left = 1.0 if compact else 0.0
+	%HelpPanel.anchor_right = 1.0 if compact else 0.0
+	%HelpPanel.offset_left = -440.0 if compact else 24.0
+	%HelpPanel.offset_right = -24.0 if compact else 440.0
+	%HelpPanel.visible = not (compact and %DebugPanel.visible)
 
 
 func _set_debug_mode(index: int) -> void:

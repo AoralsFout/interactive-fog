@@ -8,6 +8,7 @@ const MAX_OBSTACLES := 32
 const MAX_STAMPS := 16
 const STAMP_FLOAT_COUNT := 8
 const MAX_BURSTS := 4
+const MAX_CUT_SEGMENTS := 16
 const SHOCK_FLOAT_COUNT := 8
 const MAX_SHOCK_SUBSTEPS := 64
 const PARAMETER_BYTES := 7 * 16
@@ -20,6 +21,7 @@ const SHADERS := {
 	"predict": preload("res://fog/shaders/density_predict.glsl"),
 	"transport": preload("res://fog/shaders/simulate.glsl"),
 	"shock_field": preload("res://fog/shaders/shock_field.glsl"),
+	"shock_seed": preload("res://fog/shaders/shock_seed.glsl"),
 	"shock_transport": preload("res://fog/shaders/shock_transport.glsl"),
 }
 
@@ -139,7 +141,7 @@ func _initialize(resolution: int, density_resolution: int) -> void:
 		_pipelines[stage] = _own(_rd.compute_pipeline_create(shader))
 	_parameters = _own(_rd.storage_buffer_create(PARAMETER_BYTES))
 	_stamps = _own(_rd.storage_buffer_create(MAX_STAMPS * STAMP_FLOAT_COUNT * 4))
-	_shocks = _own(_rd.storage_buffer_create(MAX_BURSTS * SHOCK_FLOAT_COUNT * 4))
+	_shocks = _own(_rd.storage_buffer_create((MAX_BURSTS + MAX_CUT_SEGMENTS) * SHOCK_FLOAT_COUNT * 4))
 	_obstacles = _own(_rd.storage_buffer_create(MAX_OBSTACLES * 32))
 	var sampler := RDSamplerState.new()
 	sampler.mag_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
@@ -197,6 +199,9 @@ func _initialize(resolution: int, density_resolution: int) -> void:
 			_image(5, _states[1 - index]), _image(6, _coordinates[1 - index]),
 			_image(7, _display), _image(8, _display_coordinates)])
 		_sets["shock_transport%d" % index] = _make_set("shock_transport", uniforms)
+		_sets["shock_seed%d" % index] = _make_set("shock_seed", [
+			_sample(3, _states[index]), _sample(4, _coordinates[index]),
+			_image(5, _states[1 - index]), _image(6, _coordinates[1 - index])])
 	for rid in _resources:
 		if not rid.is_valid():
 			push_error("交互雾：流体资源或 uniform set 创建失败。")
@@ -209,12 +214,14 @@ func _initialize(resolution: int, density_resolution: int) -> void:
 	_ready_on_gpu = true
 
 
-func _dispatch(list: int, stage: String, uniform_set: RID, size: int, push := PackedByteArray()) -> void:
+func _dispatch(list: int, stage: String, uniform_set: RID, size: int, push := PackedByteArray(), extent := Vector2i.ZERO) -> void:
 	_rd.compute_list_bind_compute_pipeline(list, _pipelines[stage])
 	_rd.compute_list_bind_uniform_set(list, uniform_set, 0)
 	if not push.is_empty():
 		_rd.compute_list_set_push_constant(list, push, push.size())
-	_rd.compute_list_dispatch(list, ceili(float(size) / 8.0), ceili(float(size) / 8.0), 1)
+	if extent == Vector2i.ZERO:
+		extent = Vector2i(size, size)
+	_rd.compute_list_dispatch(list, ceili(float(extent.x) / 8.0), ceili(float(extent.y) / 8.0), 1)
 	_rd.compute_list_add_barrier(list)
 
 
@@ -223,8 +230,24 @@ func _advance(parameters: PackedByteArray, stamps: PackedByteArray,
 	if not _ready_on_gpu:
 		return
 	var peak := 0.0
+	var cut_peak := 0.0
+	var bounds_min := Vector2(INF, INF)
+	var bounds_max := Vector2(-INF, -INF)
 	for offset in range(0, shocks.size(), SHOCK_FLOAT_COUNT * 4):
-		peak += absf(shocks.decode_float(offset + 12))
+		var start := Vector2(shocks.decode_float(offset), shocks.decode_float(offset + 4))
+		var radius := shocks.decode_float(offset + 8)
+		if shocks.decode_float(offset + 24) > 0.5:
+			cut_peak = maxf(cut_peak, absf(shocks.decode_float(offset + 12)))
+			var end := Vector2(shocks.decode_float(offset + 16), shocks.decode_float(offset + 20))
+			bounds_min = bounds_min.min(start.min(end) - Vector2.ONE * radius)
+			bounds_max = bounds_max.max(start.max(end) + Vector2.ONE * radius)
+		else:
+			peak += absf(shocks.decode_float(offset + 12))
+			var support := radius + shocks.decode_float(offset + 16)
+			bounds_min = bounds_min.min(start - Vector2.ONE * support)
+			bounds_max = bounds_max.max(start + Vector2.ONE * support)
+	# 划开段取局部最强作用，不相加；连续路径重叠不会叠出过大速度。
+	peak += cut_peak
 	var dt := parameters.decode_float(32)
 	var cell := minf(parameters.decode_float(0), parameters.decode_float(4)) / _density_resolution
 	# 两个 MAC 面分量可能在不同位置取到峰值，用逐轴上界约束 CFL。
@@ -258,13 +281,26 @@ func _advance(parameters: PackedByteArray, stamps: PackedByteArray,
 	_dispatch(list, "transport", _sets["transport%d" % _read], _density_resolution)
 	_read = 1 - _read
 	if peak > 0.000001 and dt > 0.0:
-		_dispatch(list, "shock_field", _sets["shock_field"], _density_resolution)
+		var margin := maxf(parameters.decode_float(0), parameters.decode_float(4)) / _density_resolution * 2.0
+		var bounds := PackedFloat32Array([bounds_min.x - margin, bounds_min.y - margin, bounds_max.x + margin, bounds_max.y + margin]).to_byte_array()
+		_dispatch(list, "shock_field", _sets["shock_field"], _density_resolution, bounds)
+		var region := Vector2(parameters.decode_float(0), parameters.decode_float(4))
+		var center := Vector2(parameters.decode_float(8), parameters.decode_float(12))
+		var low := ((bounds_min - Vector2.ONE * margin - center) / region + Vector2.ONE * 0.5) * _density_resolution
+		var high := ((bounds_max + Vector2.ONE * margin - center) / region + Vector2.ONE * 0.5) * _density_resolution
+		var origin := Vector2i(low.floor()).clamp(Vector2i.ZERO, Vector2i.ONE * (_density_resolution - 1))
+		var extent := Vector2i(high.ceil()).clamp(origin + Vector2i.ONE, Vector2i.ONE * _density_resolution) - origin
+		_dispatch(list, "shock_seed", _sets["shock_seed%d" % _read], _density_resolution, PackedInt32Array([0, 0, 0, 0]).to_byte_array())
 		var push := PackedByteArray()
-		push.resize(16)
+		push.resize(32)
 		push.encode_float(0, dt / substeps)
+		push.encode_s32(8, origin.x)
+		push.encode_s32(12, origin.y)
+		push.encode_s32(16, extent.x)
+		push.encode_s32(20, extent.y)
 		for index in range(substeps):
 			push.encode_s32(4, 1 if index == substeps - 1 else 0)
-			_dispatch(list, "shock_transport", _sets["shock_transport%d" % _read], _density_resolution, push)
+			_dispatch(list, "shock_transport", _sets["shock_transport%d" % _read], _density_resolution, push, extent)
 			_read = 1 - _read
 	_rd.compute_list_end()
 

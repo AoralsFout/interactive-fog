@@ -83,11 +83,12 @@ ring_segments = 6
 resource_local_to_scene = true
 script = ExtResource("9_kbqbn")
 thickness = 0.8500000000000001
+density = 5.0
 albedo = Color(1, 1, 1, 1)
+obstacle_fade = 0.02
 
 [node name="InteractiveFogDemo" type="Node3D" unique_id=819685183]
 script = ExtResource("1_controller")
-burst_duration = 0.2
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=834132990]
 environment = SubResource("Environment_demo")

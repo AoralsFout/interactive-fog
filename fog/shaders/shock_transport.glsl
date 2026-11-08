@@ -10,7 +10,7 @@ layout(r32f,set=0,binding=5) uniform writeonly image2D next_state;
 layout(rgba32f,set=0,binding=6) uniform writeonly image2D next_coordinates;
 layout(rgba16f,set=0,binding=7) uniform writeonly image2D display_state;
 layout(rgba32f,set=0,binding=8) uniform writeonly image2D display_coordinates;
-layout(push_constant,std430) uniform Substep { float dt; int final_step; vec2 padding; } substep;
+layout(push_constant,std430) uniform Substep { float dt; int final_step; ivec2 origin; ivec2 extent; ivec2 padding; } substep;
 
 float scalar(ivec2 id) {
     ivec2 size=textureSize(previous_state,0);
@@ -35,7 +35,9 @@ float flux(ivec2 left,ivec2 axis,float speed,float spacing) {
     return speed*max(reconstructed,0.0);
 }
 void main() {
-    ivec2 id=ivec2(gl_GlobalInvocationID.xy),size=imageSize(next_state);
+    ivec2 local_id=ivec2(gl_GlobalInvocationID.xy);
+    if(any(greaterThanEqual(local_id,substep.extent))) { return; }
+    ivec2 id=local_id+substep.origin,size=imageSize(next_state);
     if(any(greaterThanEqual(id,size))) { return; }
     vec2 uv=(vec2(id)+0.5)/vec2(size),cell=params.region.xy/vec2(size);
     vec4 state=texelFetch(previous_state,id,0);
