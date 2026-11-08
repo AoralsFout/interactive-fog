@@ -36,6 +36,7 @@ var _previous_obstacles := PackedFloat32Array()
 var _previous_domain := Vector4(INF, INF, INF, INF)
 var _interactor_positions: Dictionary = {}
 var _pending_impulses: Array[PackedFloat32Array] = []
+var _active_bursts: Array[FogBurst] = []
 var _warned_obstacle_limit := false
 var _warned_stamp_limit := false
 var _last_global_position := Vector3(INF, INF, INF)
@@ -122,18 +123,32 @@ func reset_simulation() -> void:
 	_previous_domain = Vector4(INF, INF, INF, INF)
 	_interactor_positions.clear()
 	_pending_impulses.clear()
+	_active_bursts.clear()
 
 
 ## 一次性冲击接口。velocity 是速度增量，clear_amount 是密度的指数衰减量。
 ## 与持续的 FogInteractor3D 区别：此接口不需要调用者每帧重发。
 func disturb(world_position: Vector3, radius: float, velocity := Vector2.ZERO,
-		clear_amount := 3.0, radial_speed := 2.5, swirl_speed := 0.5) -> void:
-	if _pending_impulses.size() >= FogSimulationGPU.MAX_STAMPS:
+		clear_amount := 3.0, radial_speed := 2.5, swirl_speed := 0.5,
+		compression_gain := 1.0, compression_width := 0.35) -> void:
+	if _pending_impulses.size() + _active_bursts.size() >= FogSimulationGPU.MAX_STAMPS:
 		return
 	_pending_impulses.append(PackedFloat32Array([
 		world_position.x, world_position.z, maxf(radius, 0.05), maxf(clear_amount, 0.0),
 		velocity.x, velocity.y, radial_speed, swirl_speed,
+		clampf(compression_gain, 0.0, 3.0), maxf(compression_width, 0.05), 0.0, 0.0,
 	]))
+
+
+## 在 duration 秒内扩张到目标半径，边清空内部边把雾量堆向移动的波前。
+## 直接作用于模拟密度，不是叠加发光特效。各强度是整个冲击的总量，与模拟频率无关。
+func burst(world_position: Vector3, radius: float, duration := 0.4,
+		clear_amount := 8.0, radial_speed := 5.0, swirl_speed := 0.5,
+		compression_gain := 1.8, compression_width := 0.45) -> void:
+	if _pending_impulses.size() + _active_bursts.size() >= FogSimulationGPU.MAX_STAMPS:
+		return
+	_active_bursts.append(FogBurst.new(world_position, radius, duration, clear_amount,
+		radial_speed, swirl_speed, clampf(compression_gain, 0.0, 3.0), compression_width))
 
 
 func get_state_texture() -> Texture2D:
@@ -156,14 +171,16 @@ func _advance_simulation(step: float) -> void:
 	_previous_obstacles = obstacles
 	_previous_domain = domain
 	_simulation_time += step
-	# 六个 vec4，字节布局与两个 .glsl 文件中的 Parameters 完全一致。
+	# 七个 vec4，字节布局与三个 .glsl 文件中的 Parameters 完全一致。
 	var parameters := PackedFloat32Array([
 		domain.x, domain.y, domain.z, domain.w,
 		settings.wind_velocity.x, settings.wind_velocity.y, settings.turbulence_strength, settings.turbulence_scale,
 		step, _simulation_time, log(2.0) / settings.recovery_half_life, settings.velocity_damping,
 		settings.wind_response, settings.max_speed, settings.obstacle_influence, 0.0,
-		float(obstacles.size()) / 8.0, float(stamps.size()) / 8.0, 1.0 if _needs_reset else 0.0, float(_resolution),
+		float(obstacles.size()) / 8.0, float(stamps.size()) / FogSimulationGPU.STAMP_FLOAT_COUNT,
+		1.0 if _needs_reset else 0.0, float(_resolution),
 		settings.density_variation, settings.density_pattern_scale, 0.0, 0.0,
+		settings.max_density, log(2.0) / settings.compression_half_life, 0.0, 0.0,
 	])
 	_simulation.advance(parameters, stamps, obstacles, rebuild)
 	_render_material.set_shader_parameter("simulation_time", _simulation_time)
@@ -188,12 +205,19 @@ func _collect_obstacles() -> PackedFloat32Array:
 func _collect_stamps(step: float) -> PackedFloat32Array:
 	var data := PackedFloat32Array()
 	# 一次性冲击转换为每秒速率，GPU 乘 dt 后得到与频率无关的冲量。
+	# 仅把清除量和力转换为速率，第三个 vec4 的倍率、米制环宽保持原单位。
 	for impulse in _pending_impulses:
 		var rate := impulse.duplicate()
 		for i in range(3, 8):
 			rate[i] /= step
 		data.append_array(rate)
 	_pending_impulses.clear()
+	var ongoing_bursts: Array[FogBurst] = []
+	for wave in _active_bursts:
+		data.append_array(wave.advance(step))
+		if not wave.is_finished():
+			ongoing_bursts.append(wave)
+	_active_bursts = ongoing_bursts
 	var live_positions: Dictionary = {}
 	for node in get_tree().get_nodes_in_group(&"interactive_fog_interactors"):
 		var interactor := node as FogInteractor3D
@@ -207,11 +231,11 @@ func _collect_stamps(step: float) -> PackedFloat32Array:
 		var velocity := Vector2(position_now.x - previous.x, position_now.z - previous.z) / step
 		if not interactor.enabled:
 			continue
-		if interactor.vertical_reach >= 0.0 and absf(position_now.y - global_position.y) > settings.thickness + interactor.vertical_reach:
+		if interactor.vertical_reach >= 0.0 and absf(position_now.y - global_position.y) > settings.get_volume_height() + interactor.vertical_reach:
 			continue
 		if not interactor.emit_when_stationary and velocity.length() < interactor.minimum_speed:
 			continue
-		if data.size() >= FogSimulationGPU.MAX_STAMPS * 8:
+		if data.size() >= FogSimulationGPU.MAX_STAMPS * FogSimulationGPU.STAMP_FLOAT_COUNT:
 			if not _warned_stamp_limit:
 				push_warning("交互雾：单步最多支持 16 个交互作用，超出部分已忽略。")
 				_warned_stamp_limit = true
@@ -222,8 +246,9 @@ func _collect_stamps(step: float) -> PackedFloat32Array:
 
 
 func _apply_appearance() -> void:
-	_volume.position = Vector3(0.0, settings.thickness * 0.5, 0.0)
-	_volume.size = Vector3(settings.area_size.x, settings.thickness, settings.area_size.y)
+	var volume_height := settings.get_volume_height()
+	_volume.position = Vector3(0.0, volume_height * 0.5, 0.0)
+	_volume.size = Vector3(settings.area_size.x, volume_height, settings.area_size.y)
 	var values := {
 		"area_size": settings.area_size, "world_origin": global_position,
 		"thickness": settings.thickness, "density": settings.density,
@@ -232,6 +257,8 @@ func _apply_appearance() -> void:
 		"obstacle_fade": maxf(settings.obstacle_fade, settings.area_size[settings.area_size.max_axis_index()] / settings.resolution),
 		"detail_scale": settings.detail_scale, "detail_amount": settings.detail_amount,
 		"detail_speed": settings.detail_speed, "wind_velocity": settings.wind_velocity,
+		"compression_visibility": settings.compression_visibility,
+		"compression_height_boost": settings.compression_height_boost,
 	}
 	for key in values:
 		_render_material.set_shader_parameter(key, values[key])

@@ -8,7 +8,9 @@ uniform int mode = 0;
 void fragment() {
 	vec4 field = texture(field_texture, UV);
 	vec4 obstacle = texture(obstacle_texture, UV);
-	vec3 color = mix(vec3(0.02, 0.05, 0.07), vec3(0.58, 0.85, 0.88), field.r);
+	vec3 color = mix(vec3(0.02, 0.05, 0.07), vec3(0.58, 0.85, 0.88), min(field.r, 1.0));
+	// 大于基准密度的压缩环用暖色显示，避免直接饱和成白色而看不出堆积强度。
+	color = mix(color, vec3(1.0, 0.52, 0.12), 1.0 - exp(-max(field.r - 1.0, 0.0)));
 	if (mode == 1) {
 		color = vec3(field.g * 0.15 + 0.5, field.b * 0.15 + 0.5, length(field.gb) * 0.2);
 	} else if (mode == 2) {

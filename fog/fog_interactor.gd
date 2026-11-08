@@ -14,6 +14,10 @@ extends Node3D
 @export_range(-15.0, 15.0, 0.1) var radial_strength := 2.0
 ## 切向加速度，正负代表不同旋转方向。
 @export_range(-15.0, 15.0, 0.1) var swirl_strength := 1.0
+## 将中心移走的雾量堆到外围。1 为近似等量重分配，大于 1 会夸张浓雾环，0 关闭堆积。
+@export_range(0.0, 3.0, 0.05) var compression_gain := 1.0
+## 外围浓雾环的半宽。越窄峰值越高；实际至少覆盖一个模拟格。
+@export_range(0.05, 2.0, 0.05, "suffix:m") var compression_width := 0.35
 ## 关闭后，仅在移动时生效，避免静止角色持续吹走周围雾。
 @export var emit_when_stationary := false
 @export_range(0.0, 1.0, 0.01, "suffix:m/s") var minimum_speed := 0.08
@@ -25,10 +29,12 @@ func _enter_tree() -> void:
 	add_to_group(&"interactive_fog_interactors")
 
 
+## 三个 vec4：中心/半径/清除速率，方向/径向/切向力，堆积倍率/米制环宽/保留。
 func pack_gpu_stamp(horizontal_velocity: Vector2) -> PackedFloat32Array:
 	return PackedFloat32Array([
 		global_position.x, global_position.z, radius, clearing_rate,
 		horizontal_velocity.x * directional_strength,
 		horizontal_velocity.y * directional_strength,
 		radial_strength, swirl_strength,
+		compression_gain, compression_width, 0.0, 0.0,
 	])

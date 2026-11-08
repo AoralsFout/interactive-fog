@@ -2,7 +2,7 @@
 #version 450
 
 // 二维半拉格朗日搬运：从当前格点沿速度反向追踪，读取上一状态。
-// 状态 RGBA = 密度、水平速度 X、水平速度 Z、保留。
+// 状态 RGBA = 密度（允许超过 1）、水平速度 X、水平速度 Z、相对目标的压缩量。
 // 不求解压力、不模拟竖直速度；恢复项有意补充密度，服务于可控的游戏表现。
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 layout(set = 0, binding = 0) uniform sampler2D previous_state;
@@ -16,9 +16,11 @@ layout(std430, set = 0, binding = 4) readonly buffer Parameters {
     vec4 behavior;
     vec4 counts;
     vec4 pattern;
+    vec4 compression;  // 密度上限、超额密度释放速率、保留、保留
 } params;
-struct Stamp { vec4 brush; vec4 force; };
+struct Stamp { vec4 brush; vec4 force; vec4 compression; };
 layout(std430, set = 0, binding = 5) readonly buffer Stamps { Stamp items[]; } stamps;
+layout(std430, set = 0, binding = 6) readonly buffer Redistribution { vec4 items[]; } redistribution;
 
 float hash21(vec2 p) {
     vec3 q = fract(vec3(p.xyx) * 0.1031);
@@ -83,20 +85,35 @@ void main() {
         velocity += (params.flow.xy - velocity) * (1.0 - exp(-params.behavior.x * dt));
         velocity += curl * params.flow.z * dt;
 
+        float compressed_density = 0.0;
         for (int i = 0; i < int(params.counts.y); i++) {
             Stamp stamp = stamps.items[i];
             vec2 offset = p - stamp.brush.xy;
-            float radius = max(stamp.brush.z, 0.01);
-            float weight = 1.0 - smoothstep(0.0, radius, length(offset));
-            vec2 radial = offset / max(length(offset), 0.01);
+            float radius = max(stamp.brush.z, cell * 1.5);
+            float distance = length(offset);
+            // 至少保留一个格宽，低分辨率下也不会出现细环在格点之间跳变。
+            float width = max(cell, min(stamp.compression.y, radius * 0.6));
+            if (distance > radius + width) { continue; }
+            // 大部分圆盘保持完整推开力度，只在接近波前时淡出，形成清晰的中空区域。
+            float weight = 1.0 - smoothstep(radius * 0.8, radius, distance);
+            float ring = 1.0 - smoothstep(0.0, width, abs(distance - radius));
+            vec2 radial = offset / max(distance, 0.01);
             vec2 force = stamp.force.xy + radial * stamp.force.z + vec2(-radial.y, radial.x) * stamp.force.w;
-            velocity += force * weight * dt;
+            velocity += force * max(weight, ring) * dt;
             density *= exp(-stamp.brush.w * weight * dt);
+            // 此对称平滑环的面积积分约为 2πRW。宽度越窄，同样的雾量就堆得越高。
+            // 额外密度最后统一加入，避免同一步里的其他清除作用立刻擦掉新形成的环。
+            float area = 6.2831853 * radius * width;
+            compressed_density += redistribution.items[i].x * stamp.compression.x * ring / max(area, 0.001);
         }
+        density += compressed_density;
         velocity = guide_velocity(velocity, obstacle);
         velocity *= min(1.0, params.behavior.y / max(length(velocity), 0.0001));
-        density = mix(density, target_density, 1.0 - exp(-params.dynamics.z * dt));
-        result = vec4(clamp(density, 0.0, 1.0), velocity, 1.0);
+        // 高密度环可以迅速散开；中心空洞则仍按原有恢复时间回填，二者独立可调。
+        float recovery = density > target_density ? params.compression.y : params.dynamics.z;
+        density = mix(density, target_density, 1.0 - exp(-recovery * dt));
+        density = clamp(density, 0.0, params.compression.x);
+        result = vec4(density, velocity, max(density - target_density, 0.0));
     }
     imageStore(next_state, pixel, result);
     // 固定的展示纹理使 Fog Shader 和 HUD 不需要随 ping-pong 更换绑定。

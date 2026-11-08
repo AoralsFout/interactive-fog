@@ -18,6 +18,8 @@ uniform float detail_amount = 0.8;
 uniform float detail_speed = 0.32;
 uniform vec2 wind_velocity = vec2(0.7, 0.18);
 uniform float simulation_time = 0.0;
+uniform float compression_visibility = 0.9;
+uniform float compression_height_boost = 0.8;
 
 void fog() {
 	vec3 local = WORLD_POSITION - world_origin;
@@ -27,8 +29,11 @@ void fog() {
 	float boundary = smoothstep(0.0, edge_fade, min(border.x, border.y));
 	float field_density = 1.0;
 	float obstacle_mask = 1.0;
+	float compression = 0.0;
 	if (use_simulation) {
-		field_density = texture(state_texture, uv).r;
+		vec4 state = texture(state_texture, uv);
+		field_density = state.r;
+		compression = state.a;
 		obstacle_mask = smoothstep(0.0, obstacle_fade, texture(obstacle_texture, uv).r);
 	}
 	// 两个频段共享一张小型、预生成的三维噪声纹理，避免逐 froxel 计算昂贵噪声。
@@ -39,8 +44,12 @@ void fog() {
 	float fine = texture(detail_texture, noise_uv * 2.07 + vec3(0.17)).r;
 	float cloud = smoothstep(0.32, 0.68, broad * 0.75 + fine * 0.25);
 	float detail = mix(1.0, cloud, detail_amount);
+	// 真正堆积的雾会填满细碎空隙，并升高到本层允许的顶部，形成厚实的受光边缘。
+	float compressed_fill = compression_visibility * smoothstep(0.0, 0.8, compression);
+	detail = mix(detail, 1.0, compressed_fill);
 	// 用同一噪声轻微改变雾顶高度，使贴地雾具有可见的高低起伏，而非平整的半透明盒子。
-	float local_thickness = thickness * mix(1.0, mix(0.22, 1.0, cloud), detail_amount);
+	float calm_height = mix(1.0, mix(0.22, 1.0, cloud), detail_amount);
+	float local_thickness = thickness * mix(calm_height, 1.0 + compression_height_boost, compressed_fill);
 	float height = clamp(local.y / local_thickness, 0.0, 1.0);
 	float vertical = exp(-height * height_falloff) * (1.0 - smoothstep(0.4, 1.0, height));
 	vertical *= step(0.0, local.y) * step(local.y, local_thickness);

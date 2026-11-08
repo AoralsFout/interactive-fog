@@ -78,7 +78,8 @@ func _run() -> void:
 	_check(_obstacle_distance_at(Vector2.ZERO) > 0.0, "paused field refreshes moved obstacles")
 	_field.settings.thickness = 1.8
 	await _frames(3)
-	_check(is_equal_approx((_field.get_node("FogVolume") as FogVolume).size.y, 1.8), "height updates existing scene node")
+	var expected_height := 1.8 * (1.0 + _field.settings.compression_height_boost)
+	_check(is_equal_approx((_field.get_node("FogVolume") as FogVolume).size.y, expected_height), "height updates existing scene node and reserves compressed rim space")
 	_field.settings.resolution = 64
 	await _frames(6)
 	_check(_field.get_state_texture().get_width() == 64, "live resolution rebuild")

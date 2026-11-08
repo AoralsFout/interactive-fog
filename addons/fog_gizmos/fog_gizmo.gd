@@ -24,7 +24,7 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 	var material_name := "field"
 	if node is InteractiveFogField and node.settings != null:
 		var half: Vector2 = node.settings.area_size * 0.5
-		lines = _box_lines(half, node.settings.thickness)
+		lines = _box_lines(half, node.settings.get_volume_height())
 	elif node is FogObstacle3D:
 		material_name = "obstacle"
 		if node.shape == FogObstacle3D.Shape.CIRCLE:

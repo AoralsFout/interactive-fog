@@ -12,6 +12,7 @@ layout(std430, set = 0, binding = 1) readonly buffer Parameters {
     vec4 behavior;     // 风速恢复、最大速度、导流距离、保留
     vec4 counts;       // 障碍数量、交互数量、重置标记、分辨率
     vec4 pattern;      // 基础密度变化强度、空间频率、保留、保留
+    vec4 compression;  // 与模拟共用参数缓冲，保持布局一致
 } params;
 struct Obstacle { vec4 geometry; vec4 transform; };
 layout(std430, set = 0, binding = 2) readonly buffer Obstacles { Obstacle items[]; } obstacles;

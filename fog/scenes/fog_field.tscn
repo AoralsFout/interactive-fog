@@ -26,6 +26,6 @@ script = ExtResource("1_field")
 settings = ExtResource("3_settings")
 
 [node name="FogVolume" type="FogVolume" parent="."]
-position = Vector3(0, 0.75, 0)
-size = Vector3(24, 1.5, 20)
+position = Vector3(0, 1.35, 0)
+size = Vector3(24, 2.7, 20)
 material = SubResource("Material_fog")

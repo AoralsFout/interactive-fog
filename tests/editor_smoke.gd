@@ -34,7 +34,8 @@ func run(plugin: EditorPlugin) -> void:
 	await _frames(4)
 	var volume := field.get_node("FogVolume") as FogVolume
 	var material: ShaderMaterial = field.get("_render_material")
-	_check(is_equal_approx(volume.size.y, 2.1), "Inspector-style height changes apply while paused")
+	var expected_height := 2.1 * (1.0 + field.settings.compression_height_boost)
+	_check(is_equal_approx(volume.size.y, expected_height), "Inspector-style height changes apply while paused")
 	_check(is_equal_approx(material.get_shader_parameter("density"), 1.7), "Inspector-style density updates render material")
 	var wall := scene.get_node("Obstacles/WallWest") as FogObstacle3D
 	var old_size := wall.box_size

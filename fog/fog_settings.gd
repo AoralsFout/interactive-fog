@@ -73,8 +73,31 @@ extends Resource
 		density_pattern_scale = maxf(value, 0.1)
 		emit_changed()
 
+@export_group("挤压与爆开")
+## 初始基准密度不超过 1；推雾后的外围允许堆积到此上限。
+@export_range(1.0, 16.0, 0.1) var max_density := 8.0:
+	set(value):
+		max_density = clampf(value, 1.0, 16.0)
+		emit_changed()
+## 浓雾环的超额密度释放一半所需时间，不影响中心空洞的恢复速度。
+@export_range(0.1, 10.0, 0.1, "suffix:s") var compression_half_life := 1.6:
+	set(value):
+		compression_half_life = maxf(value, 0.1)
+		emit_changed()
+## 压缩区填满高度轮廓与噪声空隙的程度，使浓雾环更厚实。0 表示沿用普通雾轮廓。
+@export_range(0.0, 1.0, 0.01) var compression_visibility := 0.9:
+	set(value):
+		compression_visibility = clampf(value, 0.0, 1.0)
+		emit_changed()
+## 浓雾环相对平静雾层最多增高的比例，0.8 表示最多增加 80% 高度。
+## 只增高真正压缩的区域，不改变普通雾的厚度；FogVolume 会自动预留这个空间。
+@export_range(0.0, 1.5, 0.05) var compression_height_boost := 0.8:
+	set(value):
+		compression_height_boost = clampf(value, 0.0, 1.5)
+		emit_changed()
+
 @export_group("雾的外观")
-## FogVolume 的高度。太薄容易受体积雾网格欠采样影响而闪烁。
+## 平静雾层的高度。浓雾环可按 compression_height_boost 增高；太薄容易采样闪烁。
 @export_range(0.2, 4.0, 0.05, "suffix:m") var thickness := 1.5:
 	set(value):
 		thickness = maxf(value, 0.2)
@@ -120,3 +143,8 @@ extends Resource
 	set(value):
 		detail_speed = maxf(value, 0.0)
 		emit_changed()
+
+
+## 渲染包围体使用的最大高度；各场景组件通过此接口共用一致的空间范围。
+func get_volume_height() -> float:
+	return thickness * (1.0 + compression_height_boost)

@@ -25,6 +25,7 @@ volumetric_fog_albedo = Color(0.78, 0.87, 0.94, 1)
 volumetric_fog_gi_inject = 0.0
 volumetric_fog_length = 45.0
 volumetric_fog_ambient_inject = 0.35
+volumetric_fog_temporal_reprojection_enabled = false
 volumetric_fog_temporal_reprojection_amount = 0.5
 
 [sub_resource type="StandardMaterial3D" id="Material_platform"]
@@ -79,11 +80,16 @@ inner_radius = 0.98
 rings = 48
 ring_segments = 6
 
-[sub_resource type="Resource" id="Resource_iscmt"]
+[sub_resource type="Resource" id="Resource_kbqbn"]
 resource_local_to_scene = true
 script = ExtResource("9_kbqbn")
 resolution = 512
 simulation_hz = 60.0
+recovery_half_life = 12.0
+max_density = 2.0
+thickness = 2.0
+density = 5.0
+detail_amount = 0.0
 
 [node name="InteractiveFogDemo" type="Node3D" unique_id=819685183]
 script = ExtResource("1_controller")
@@ -177,7 +183,7 @@ pitch_degrees = 45.0
 target_offset = Vector3(-2.6, 0.2, 0)
 
 [node name="Camera3D" type="Camera3D" parent="CameraRig" unique_id=235014063]
-transform = Transform3D(0.9612617, -0.19490507, 0.19490504, 0, 0.7071067, 0.7071068, -0.2756374, -0.6797147, 0.6797146, 3.0522466, 20.706097, 19.711725)
+transform = Transform3D(0.9612617, -0.19490504, 0.19490504, 0, 0.70710665, 0.7071068, -0.2756374, -0.6797146, 0.6797146, 3.0522466, 20.706097, 19.711725)
 current = true
 fov = 55.0
 near = 0.15
@@ -205,6 +211,6 @@ swirl_strength = 2.0
 emit_when_stationary = true
 
 [node name="FogField" parent="." unique_id=1853580114 instance=ExtResource("2_fog")]
-settings = SubResource("Resource_iscmt")
+settings = SubResource("Resource_kbqbn")
 
 [node name="HUD" parent="." unique_id=842371717 instance=ExtResource("9_hud")]

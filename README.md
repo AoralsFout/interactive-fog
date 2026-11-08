@@ -10,8 +10,8 @@ Godot 4.7 的独立 3D demo：二维 GPU 雾场负责密度与水平速度，原
 | --- | --- |
 | WASD / 方向键 | 相机相对移动角色，留下推雾尾迹 |
 | Shift | 加速移动 |
-| 鼠标左键按住 / 拖动 | 在地面持续吹散雾；划动方向决定推力方向 |
-| Space | 在鼠标位置施加一次径向冲击 |
+| 鼠标左键按下 / 按住 / 拖动 | 按下立即推开中心雾，按住持续挤压，外围堆积成浓雾环；划动方向决定推力方向 |
+| Space | 在鼠标位置产生扩张冲击波，把中心雾推向外圈，再逐渐散开 |
 | 鼠标右键拖动 | 环绕相机 |
 | 滚轮 | 相机缩放 |
 | R / P / Tab | 重置 / 暂停流动 / 显示场数据 |
@@ -28,6 +28,8 @@ Godot 4.7 的独立 3D demo：二维 GPU 雾场负责密度与水平速度，原
 4. **Obstacles** 下的柱子与墙可以直接平移、绕 Y 轴旋转或调整尺寸。标准预制体开启 `Sync Prefab Geometry` 时，`Box Size` / `Radius` / `Height` 会同步网格和物理碰撞体。
 5. 选择 **Lighting/WarmSpot**、**Lighting/CoolOmni** 或方向光，直接调整原生 Light3D 属性。`Light Volumetric Fog Energy` 控制灯光影响雾的强度；`Shadow Enabled` 也影响雾中的几何阴影。
 6. 选择 **WorldEnvironment → Environment → Volumetric Fog**，调整可见距离、时间重投影和环境注入。选择 **CameraRig** 调整预览角度、距离和目标偏移。
+7. 选择主场景根节点 **InteractiveFogDemo**，在 **鼠标推雾 / 空格冲击波** 分组中调整点击推力、冲击持续时间、目标半径、清除量、堆积倍率和环宽。按住左键的持续推力仍由 **MouseBrush/FogInteractor** 提供；它的环宽和倍率由根节点统一同步。
+8. **FogField → Settings → 挤压与爆开** 提供密度上限、浓雾环释放半衰期、厚实程度和增高比例。普通雾的密度基准为 1；压缩后允许超过 1，数据视图里这些高密度区域显示为暖色。浓雾环自身仍按灯光与阴影渲染，不是发光圆环。
 
 选中雾场时显示青色边界框，选中障碍足迹时显示橙色轮廓，选中交互器时显示蓝色作用半径。这些是编辑器 Gizmo，不参与运行时渲染。如果看不到，请检查编辑器 Gizmos 菜单和项目的 `Interactive Fog Gizmos` 插件是否启用。
 
@@ -47,7 +49,10 @@ Godot 4.7 的独立 3D demo：二维 GPU 雾场负责密度与水平速度，原
 | Max Speed | 5 m/s | 速度限幅，同时约束搬运稳定性 |
 | Obstacle Influence | 0.65 m | 障碍表面附近的导流范围 |
 | Density Variation / Pattern Scale | 0.7 / 0.55 | **写入模拟场**的大尺度疏密强度与空间频率，轮廓会被流场搬运 |
-| Thickness / Density | 1.5 m / 2.6 | 雾层最大厚度 / 光学密度倍率 |
+| Thickness / Density | 1.5 m / 2.6 | 平静雾层厚度 / 光学密度倍率 |
+| Max Density | 8 | 模拟密度上限，允许中心移出的雾堆到外围 |
+| Compression Half Life | 1.6 s | 浓雾环超额密度的释放半衰期，独立于空洞恢复 |
+| Compression Visibility / Height Boost | 0.9 / 0.8 | 压缩区的厚实程度 / 相对平静雾层的最大增高比例 |
 | Albedo / Emission | 见 Inspector | 散射颜色 / 暗部补色；Emission 不照亮场景物体 |
 | Height Falloff | 1.8 | 越大越贴地 |
 | Edge Fade / Obstacle Fade | 1.25 / 0.18 m | 区域边缘 / 障碍周围的软化宽度 |
@@ -68,7 +73,9 @@ fog/
   fog_simulation_gpu.gd         渲染线程、GPU 资源生命周期、Compute 调度
   fog_obstacle.gd               二维障碍足迹与标准预制体几何同步
   fog_interactor.gd             持续交互器的数据组件
+  fog_burst.gd                  按模拟时间扩张的冲击状态，不生成场景节点
   shaders/build_obstacles.glsl  构建距离与法线纹理，几何变化时才运行
+  shaders/prepare_interactions.glsl  在 GPU 上估算中心本步移出的雾量
   shaders/simulate.glsl         搬运、导流、交互、阻尼、密度恢复
   shaders/ground_fog.gdshader   高度轮廓、噪声和原生体积受光
 demo/
@@ -94,11 +101,20 @@ artifacts/                     验收截图与临时保存检查，不进入资�
 ```gdscript
 # 世界坐标、作用半径、水平速度增量、清除量、径向速度增量、旋转速度增量。
 $FogField.disturb(Vector3(0, 0, 2), 2.5, Vector2(1, 0), 3.0, 4.0, 1.0)
+
+# 在 0.4 秒内扩张到 3 米，外围窄环堆积雾量。末两项为堆积倍率、环的半宽。
+$FogField.burst(Vector3(0, 0, 2), 3.0, 0.4, 8.0, 5.0, 0.5, 1.8, 0.45)
 ```
+
+`disturb()` 还可追加 `compression_gain`、`compression_width`。倍率 1 近似等量重分配，0 关闭堆积，大于 1 会夸张爆开效果。实际环宽至少覆盖一个模拟格；密度受 `Max Density` 限制。空格波前随模拟推进，暂停时冻结，重置时清除。
 
 ## 模拟与开销
 
-状态 RGBA16F 保存密度和两个水平速度分量。两张状态纹理交替读写，另有固定展示纹理与障碍纹理；高级材质通过 `Texture2DRD` 直接采样主 RenderingDevice 的资源。CPU 只打包少量交互参数，常规运行不读取 GPU 结果，也不调用 `sync()`。
+状态 RGBA16F 保存密度、两个水平速度分量和相对目标的压缩量。两张状态纹理交替读写，另有固定展示纹理与障碍纹理；高级材质通过 `Texture2DRD` 直接采样主 RenderingDevice 的资源。CPU 只打包少量交互参数，常规运行不读取 GPU 结果，也不调用 `sync()`。
+
+存在交互时，预处理 Compute 为每个作用点使用 12×12 个采样点估算本步移出的雾量，再交给主模拟按窄环面积重分配。采样在 GPU 上每个作用点执行一次，不在每个雾格重复积分，不需要额外状态纹理；只新增很小的缓冲。没有交互时跳过该步骤。多个重叠作用、移动边界、密度上限和恢复项仍会引入守恒误差，属于表现性挤压。
+
+压缩量还会让浓雾环减少噪声空隙并增高。`Thickness` 保持控制平静高度，FogVolume 与编辑器辅助线会按 `Thickness × (1 + Compression Height Boost)` 自动预留最大空间。设增高比例为 0 可只保留密度堆积；增高会扩大局部雾着色覆盖范围。
 
 每步先反向追踪读取上一状态，再施加风、旋流、交互与边界导流，最后进行指数恢复。障碍距离场包含到最近固体的距离与朝自由空间的法线：速度的入射分量在边缘被削弱，切向分量保留。回溯路径还分段检查固体，避免从墙另一侧直接采样。粗于网格的障碍最可靠；小于一个格的薄物体请增加足迹 padding 或提高分辨率。
 
@@ -122,10 +138,13 @@ $FogField.disturb(Vector3(0, 0, 2), 2.5, Vector2(1, 0), 3.0, 4.0, 1.0)
 ```powershell
 godot --headless --editor --path . --import --quit
 godot --path . --script res://tests/gpu_smoke.gd
+godot --path . --fixed-fps 60 --script res://tests/fog_compression.gd
 godot --editor --path . -- --fog-editor-smoke
 ```
 
 GPU 验收检查打散后持久密度降低、恢复、障碍内部清空、边界导流、移动障碍、暂停时遮罩刷新、厚度热更新、分辨率重建、资源替换后 UI 重新连接，以及实际体积雾对最终画面的影响。保存 `artifacts/preview.png` 和 `artifacts/interaction.png`。
+
+挤压回归通过真实 GPU 检查中心清空、外围密度大于基准、近似雾量重分配、空区不凭空生出浓雾环、密度上限、独立消散、持续笔刷及鼠标/空格的输入处理，并检查波前半径随时间增大。保存近距离观察图 `artifacts/burst.png`；截图只改变测试相机，不修改主场景相机参数。
 
 编辑器验收在实际 `@tool` 环境中检查预览播放/暂停、参数同步、预制体几何更新、重置按钮及场景保存。瞬态材质通过 RenderingServer 绑定，不覆盖 `.tscn` 中的 material 属性，避免将 GPU 纹理资源保存到场景。
 

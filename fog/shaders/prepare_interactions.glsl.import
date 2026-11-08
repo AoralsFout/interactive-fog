@@ -1,0 +1,13 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://jxvfg2st44vw"
+path="res://.godot/imported/prepare_interactions.glsl-ce9c926fbbbd793432afb99a50fbda2c.res"
+
+[deps]
+
+source_file="res://fog/shaders/prepare_interactions.glsl"
+dest_files=["res://.godot/imported/prepare_interactions.glsl-ce9c926fbbbd793432afb99a50fbda2c.res"]
+
+[params]

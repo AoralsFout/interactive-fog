@@ -7,9 +7,11 @@ extends RefCounted
 
 const MAX_OBSTACLES := 32
 const MAX_STAMPS := 16
-const PARAMETER_BYTES := 6 * 16
+const STAMP_FLOAT_COUNT := 12
+const PARAMETER_BYTES := 7 * 16
 const SIMULATION_SHADER: RDShaderFile = preload("res://fog/shaders/simulate.glsl")
 const OBSTACLE_SHADER: RDShaderFile = preload("res://fog/shaders/build_obstacles.glsl")
+const PREPARATION_SHADER: RDShaderFile = preload("res://fog/shaders/prepare_interactions.glsl")
 
 var state_texture := Texture2DRD.new()
 var obstacle_texture := Texture2DRD.new()
@@ -23,12 +25,16 @@ var _obstacle_rid := RID()
 var _parameters_rid := RID()
 var _stamps_rid := RID()
 var _obstacles_rid := RID()
+var _redistribution_rid := RID()
 var _sampler_rid := RID()
 var _simulation_shader_rid := RID()
 var _obstacle_shader_rid := RID()
+var _preparation_shader_rid := RID()
 var _simulation_pipeline := RID()
 var _obstacle_pipeline := RID()
+var _preparation_pipeline := RID()
 var _simulation_sets: Array[RID] = []
+var _preparation_sets: Array[RID] = []
 var _obstacle_set := RID()
 var _read_index := 0
 var _ready_on_gpu := false
@@ -57,18 +63,21 @@ func _initialize(resolution: int) -> void:
 	_resolution = resolution
 	_simulation_shader_rid = _rd.shader_create_from_spirv(SIMULATION_SHADER.get_spirv())
 	_obstacle_shader_rid = _rd.shader_create_from_spirv(OBSTACLE_SHADER.get_spirv())
-	if not _simulation_shader_rid.is_valid() or not _obstacle_shader_rid.is_valid():
+	_preparation_shader_rid = _rd.shader_create_from_spirv(PREPARATION_SHADER.get_spirv())
+	if not _simulation_shader_rid.is_valid() or not _obstacle_shader_rid.is_valid() or not _preparation_shader_rid.is_valid():
 		push_error("交互雾：Compute Shader 创建失败，请检查着色器编译输出。")
 		_release()
 		return
 	_simulation_pipeline = _rd.compute_pipeline_create(_simulation_shader_rid)
 	_obstacle_pipeline = _rd.compute_pipeline_create(_obstacle_shader_rid)
+	_preparation_pipeline = _rd.compute_pipeline_create(_preparation_shader_rid)
 	_state_rids = [_create_texture(), _create_texture()]
 	_display_rid = _create_texture()
 	_obstacle_rid = _create_texture()
 	_parameters_rid = _rd.storage_buffer_create(PARAMETER_BYTES)
-	_stamps_rid = _rd.storage_buffer_create(MAX_STAMPS * 32)
+	_stamps_rid = _rd.storage_buffer_create(MAX_STAMPS * STAMP_FLOAT_COUNT * 4)
 	_obstacles_rid = _rd.storage_buffer_create(MAX_OBSTACLES * 32)
+	_redistribution_rid = _rd.storage_buffer_create(MAX_STAMPS * 16)
 	var sampler := RDSamplerState.new()
 	sampler.mag_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
 	sampler.min_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
@@ -84,8 +93,17 @@ func _initialize(resolution: int) -> void:
 			_uniform(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 3, [_sampler_rid, _obstacle_rid]),
 			_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 4, [_parameters_rid]),
 			_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 5, [_stamps_rid]),
+			_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 6, [_redistribution_rid]),
 		]
 		_simulation_sets.append(_rd.uniform_set_create(uniforms, _simulation_shader_rid, 0))
+		var preparation_uniforms: Array[RDUniform] = [
+			_uniform(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, [_sampler_rid, _state_rids[read_index]]),
+			_uniform(RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, [_sampler_rid, _obstacle_rid]),
+			_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 2, [_parameters_rid]),
+			_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 3, [_stamps_rid]),
+			_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 4, [_redistribution_rid]),
+		]
+		_preparation_sets.append(_rd.uniform_set_create(preparation_uniforms, _preparation_shader_rid, 0))
 	var obstacle_uniforms: Array[RDUniform] = [
 		_uniform(RenderingDevice.UNIFORM_TYPE_IMAGE, 0, [_obstacle_rid]),
 		_uniform(RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER, 1, [_parameters_rid]),
@@ -136,6 +154,13 @@ func _advance(parameters: PackedByteArray, stamps: PackedByteArray,
 		_rd.compute_list_dispatch(compute_list, groups, groups, 1)
 		# mask 写入必须在模拟读取之前完成；RD 负责其余跨渲染阶段的资源屏障。
 		_rd.compute_list_add_barrier(compute_list)
+	var stamp_count := int(float(stamps.size()) / float(STAMP_FLOAT_COUNT * 4))
+	if stamp_count > 0:
+		_rd.compute_list_bind_compute_pipeline(compute_list, _preparation_pipeline)
+		_rd.compute_list_bind_uniform_set(compute_list, _preparation_sets[_read_index], 0)
+		_rd.compute_list_dispatch(compute_list, stamp_count, 1, 1)
+		# 预估的移出雾量必须先写完，主模拟再读取；整个过程都留在 GPU。
+		_rd.compute_list_add_barrier(compute_list)
 	_rd.compute_list_bind_compute_pipeline(compute_list, _simulation_pipeline)
 	_rd.compute_list_bind_uniform_set(compute_list, _simulation_sets[_read_index], 0)
 	_rd.compute_list_dispatch(compute_list, groups, groups, 1)
@@ -153,16 +178,19 @@ func _release() -> void:
 	obstacle_texture.texture_rd_rid = RID()
 	var resources: Array[RID] = []
 	resources.append_array(_simulation_sets)
+	resources.append_array(_preparation_sets)
 	resources.append(_obstacle_set)
-	resources.append_array([_simulation_pipeline, _obstacle_pipeline])
+	resources.append_array([_simulation_pipeline, _obstacle_pipeline, _preparation_pipeline])
 	resources.append_array(_state_rids)
 	resources.append_array([
 		_display_rid, _obstacle_rid, _sampler_rid, _parameters_rid,
 		_stamps_rid, _obstacles_rid, _simulation_shader_rid, _obstacle_shader_rid,
+		_redistribution_rid, _preparation_shader_rid,
 	])
 	for rid in resources:
 		if rid.is_valid():
 			_rd.free_rid(rid)
 	_simulation_sets.clear()
+	_preparation_sets.clear()
 	_state_rids.clear()
 	_rd = null
