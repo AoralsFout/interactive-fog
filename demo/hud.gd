@@ -42,7 +42,26 @@ var _status_elapsed := 0.0
 var _connected_settings: FogSettings
 
 
+const PERFORMANCE_GRID := Vector2i(224, 128)
+var fog_grid := Vector2i(
+	ProjectSettings.get_setting("rendering/environment/volumetric_fog/volume_size"),
+	ProjectSettings.get_setting("rendering/environment/volumetric_fog/volume_depth"))
+var _project_grid := fog_grid
+
+
+func set_fog_quality(index: int) -> void:
+	fog_grid = PERFORMANCE_GRID if index == 1 else _project_grid
+	RenderingServer.environment_set_volumetric_fog_volume_size(fog_grid.x, fog_grid.y)
+	%FogQuality.select(index)
+
+
+func _exit_tree() -> void:
+	if fog_grid != _project_grid:
+		RenderingServer.environment_set_volumetric_fog_volume_size(_project_grid.x, _project_grid.y)
+
+
 func _ready() -> void:
+	%FogQuality.item_selected.connect(set_fog_quality)
 	%StirButton.pressed.connect(_select_brush_mode.bind(0))
 	%PartButton.pressed.connect(_select_brush_mode.bind(1))
 	_field.textures_changed.connect(_bind_debug_textures)

@@ -32,6 +32,7 @@ var _needs_reset := true
 var _resolution := 0
 var _accumulator := 0.0
 var _simulation_time := 0.0
+var _obstacle_revision := -1
 var _previous_obstacles := PackedFloat32Array()
 var _previous_domain := Vector4(INF, INF, INF, INF)
 var _interactor_positions: Dictionary = {}
@@ -89,7 +90,7 @@ func _process(delta: float) -> void:
 		_interactor_positions.clear()
 		_cut_positions.clear()
 		var domain := Vector4(settings.area_size.x, settings.area_size.y, global_position.x, global_position.z)
-		if _collect_obstacles() != _previous_obstacles or domain != _previous_domain:
+		if FogObstacle3D.footprint_revision != _obstacle_revision or domain != _previous_domain:
 			# 暂停只冻结流动，移动障碍或调整区域仍应立刻更新静态遮罩。
 			_advance_simulation(0.0)
 		return
@@ -124,6 +125,7 @@ func _rebuild_simulation() -> void:
 func reset_simulation() -> void:
 	_needs_reset = true
 	_simulation_time = 0.0
+	_obstacle_revision = -1
 	_previous_obstacles.clear()
 	_previous_domain = Vector4(INF, INF, INF, INF)
 	_interactor_positions.clear()
@@ -181,12 +183,17 @@ func get_simulation_time() -> float:
 
 
 func _advance_simulation(step: float) -> void:
-	var obstacles := _collect_obstacles()
+	var obstacles := _previous_obstacles
+	if _obstacle_revision != FogObstacle3D.footprint_revision:
+		obstacles = _collect_obstacles()
+		_obstacle_revision = FogObstacle3D.footprint_revision
 	_expansions.clear()
 	var stamps := _collect_stamps(step) if step > 0.0 else PackedFloat32Array()
 	var domain := Vector4(settings.area_size.x, settings.area_size.y, global_position.x, global_position.z)
 	var reset := _needs_reset or domain != _previous_domain
 	var rebuild := reset or obstacles != _previous_obstacles
+	if step == 0.0 and not rebuild:
+		return
 	_previous_obstacles = obstacles
 	_previous_domain = domain
 	_simulation_time += step

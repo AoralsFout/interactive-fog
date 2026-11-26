@@ -10,13 +10,13 @@ layout(set=0,binding=5) uniform sampler2D previous_coordinates;
 layout(r32f,set=0,binding=6) uniform writeonly image2D next_state;
 layout(rgba32f,set=0,binding=7) uniform writeonly image2D next_coordinates;
 layout(rgba16f,set=0,binding=8) uniform writeonly image2D display_state;
-layout(rgba32f,set=0,binding=9) uniform writeonly image2D display_coordinates;
+layout(set=0,binding=9) uniform sampler2D source_uv;
 void main() {
     ivec2 id=ivec2(gl_GlobalInvocationID.xy),size=imageSize(next_state);
     if(any(greaterThanEqual(id,size))) { return; }
     vec2 uv=(vec2(id)+0.5)/vec2(size),p=(uv-0.5)*params.region.xy+params.region.zw;
     float dt=params.dynamics.x,time=params.dynamics.y,period=params.pattern.z;
-    vec2 source=backtrace(uv,dt);
+    vec2 source=texelFetch(source_uv,id,0).rg;
     float density=texelFetch(predicted_state,id,0).r;
     bool reset=params.counts.z>0.5;
     if(!reset && !outside(source) && solid_distance(uv)>0.0) {
@@ -46,5 +46,5 @@ void main() {
     if(solid_distance(uv)<=0.0) { density=0; coordinates=fresh; }
     vec4 result=vec4(max(density,0.0),velocity_at(uv),0);
     imageStore(next_state,id,result); imageStore(display_state,id,result);
-    imageStore(next_coordinates,id,coordinates); imageStore(display_coordinates,id,coordinates);
+    imageStore(next_coordinates,id,coordinates);
 }

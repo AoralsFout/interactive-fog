@@ -1,0 +1,449 @@
+{
+  "baseline_commit": "3d833ba",
+  "godot": "4.7.2 stable mono",
+  "gpu": "NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+  "driver": "616.56",
+  "frame_method": "D3D12 Forward+, 1920x1080 close SubViewport, VSync off, default lighting, 2 s simulation warmup, 5 s wall time per run, A/B then B/A. high=288/192; performance=224/128 manually applied on baseline. Field runs at 30 Hz. frame interval measured between frame_post_draw callbacks.",
+  "compute_method": "D3D12, 256 squared velocity and 512 squared density, 64 Jacobi iterations. GPU timestamp interval around a complete simulation submission. 15 warmup, 90 sampled steps per mode per run. B/A then A/B. Units ms.",
+  "frames": {
+    "high": {
+      "before": [
+        {
+          "median_frame_ms": 10.223,
+          "p95_frame_ms": 25.181,
+          "p99_frame_ms": 26.08,
+          "median_viewport_gpu_ms": 8.8430004119873,
+          "p95_viewport_gpu_ms": 10.1190004348755,
+          "samples": 424
+        },
+        {
+          "median_frame_ms": 10.667,
+          "p95_frame_ms": 25.065,
+          "p99_frame_ms": 26.221,
+          "median_viewport_gpu_ms": 8.98299980163574,
+          "p95_viewport_gpu_ms": 10.3610000610352,
+          "samples": 414
+        }
+      ],
+      "after": [
+        {
+          "median_frame_ms": 10.016,
+          "p95_frame_ms": 24.68,
+          "p99_frame_ms": 25.58,
+          "median_viewport_gpu_ms": 8.85799980163574,
+          "p95_viewport_gpu_ms": 10.1450004577637,
+          "samples": 431
+        },
+        {
+          "median_frame_ms": 10.223,
+          "p95_frame_ms": 25.117,
+          "p99_frame_ms": 25.923,
+          "median_viewport_gpu_ms": 8.96399974822998,
+          "p95_viewport_gpu_ms": 10.3739995956421,
+          "samples": 420
+        }
+      ]
+    },
+    "performance": {
+      "before": [
+        {
+          "median_frame_ms": 5.479,
+          "p95_frame_ms": 18.748,
+          "p99_frame_ms": 20.168,
+          "median_viewport_gpu_ms": 4.27099990844727,
+          "p95_viewport_gpu_ms": 5.38399982452393,
+          "samples": 773
+        },
+        {
+          "median_frame_ms": 5.518,
+          "p95_frame_ms": 20.106,
+          "p99_frame_ms": 22.153,
+          "median_viewport_gpu_ms": 4.40399980545044,
+          "p95_viewport_gpu_ms": 5.73099994659424,
+          "samples": 738
+        }
+      ],
+      "after": [
+        {
+          "median_frame_ms": 5.413,
+          "p95_frame_ms": 18.925,
+          "p99_frame_ms": 20.23,
+          "median_viewport_gpu_ms": 4.28000020980835,
+          "p95_viewport_gpu_ms": 5.42799997329712,
+          "samples": 777
+        },
+        {
+          "median_frame_ms": 5.385,
+          "p95_frame_ms": 19.707,
+          "p99_frame_ms": 21.56,
+          "median_viewport_gpu_ms": 4.42600011825562,
+          "p95_viewport_gpu_ms": 5.77500009536743,
+          "samples": 758
+        }
+      ]
+    },
+    "part": {
+      "before": [
+        {
+          "median_frame_ms": 10.536,
+          "p95_frame_ms": 24.568,
+          "p99_frame_ms": 26.186,
+          "median_viewport_gpu_ms": 8.91499996185303,
+          "p95_viewport_gpu_ms": 10.2189998626709,
+          "samples": 416
+        },
+        {
+          "median_frame_ms": 10.772,
+          "p95_frame_ms": 26.001,
+          "p99_frame_ms": 27.39,
+          "median_viewport_gpu_ms": 9.05200004577637,
+          "p95_viewport_gpu_ms": 10.4840002059937,
+          "samples": 403
+        }
+      ],
+      "after": [
+        {
+          "median_frame_ms": 10.395,
+          "p95_frame_ms": 24.592,
+          "p99_frame_ms": 25.646,
+          "median_viewport_gpu_ms": 8.9399995803833,
+          "p95_viewport_gpu_ms": 10.2609996795654,
+          "samples": 422
+        },
+        {
+          "median_frame_ms": 10.453,
+          "p95_frame_ms": 25.644,
+          "p99_frame_ms": 26.866,
+          "median_viewport_gpu_ms": 9.02799987792969,
+          "p95_viewport_gpu_ms": 10.4870004653931,
+          "samples": 412
+        }
+      ]
+    },
+    "four": {
+      "before": [
+        {
+          "median_frame_ms": 10.421,
+          "p95_frame_ms": 24.546,
+          "p99_frame_ms": 28.759,
+          "median_viewport_gpu_ms": 8.85299968719482,
+          "p95_viewport_gpu_ms": 10.1319999694824,
+          "samples": 404
+        },
+        {
+          "median_frame_ms": 10.886,
+          "p95_frame_ms": 25.923,
+          "p99_frame_ms": 29.708,
+          "median_viewport_gpu_ms": 9.02299976348877,
+          "p95_viewport_gpu_ms": 10.3909997940063,
+          "samples": 385
+        }
+      ],
+      "after": [
+        {
+          "median_frame_ms": 10.134,
+          "p95_frame_ms": 24.395,
+          "p99_frame_ms": 24.955,
+          "median_viewport_gpu_ms": 8.85099983215332,
+          "p95_viewport_gpu_ms": 10.1510000228882,
+          "samples": 426
+        },
+        {
+          "median_frame_ms": 10.532,
+          "p95_frame_ms": 25.793,
+          "p99_frame_ms": 27.309,
+          "median_viewport_gpu_ms": 9.05000019073486,
+          "p95_viewport_gpu_ms": 10.460000038147,
+          "samples": 409
+        }
+      ]
+    },
+    "flow-only": {
+      "before": [
+        {
+          "median_frame_ms": 2.97,
+          "p95_frame_ms": 7.092,
+          "p99_frame_ms": 16.869,
+          "median_viewport_gpu_ms": 1.17700004577637,
+          "p95_viewport_gpu_ms": 1.47300004959106,
+          "samples": 1346
+        },
+        {
+          "median_frame_ms": 3.735,
+          "p95_frame_ms": 9.711,
+          "p99_frame_ms": 16.376,
+          "median_viewport_gpu_ms": 1.18599998950958,
+          "p95_viewport_gpu_ms": 1.51999998092651,
+          "samples": 1084
+        }
+      ],
+      "after": [
+        {
+          "median_frame_ms": 2.948,
+          "p95_frame_ms": 7.253,
+          "p99_frame_ms": 16.633,
+          "median_viewport_gpu_ms": 1.19099998474121,
+          "p95_viewport_gpu_ms": 1.49199998378754,
+          "samples": 1358
+        },
+        {
+          "median_frame_ms": 2.608,
+          "p95_frame_ms": 7.845,
+          "p99_frame_ms": 17.018,
+          "median_viewport_gpu_ms": 1.22699999809265,
+          "p95_viewport_gpu_ms": 1.54499995708466,
+          "samples": 1420
+        }
+      ]
+    }
+  },
+  "compute": {
+    "before": [
+      {
+        "flow": {
+          "median_ms": 1.391616,
+          "p95_ms": 1.796096,
+          "samples": 90
+        },
+        "four_bursts": {
+          "median_ms": 4.17792,
+          "p95_ms": 5.382144,
+          "samples": 90
+        },
+        "part": {
+          "median_ms": 1.430528,
+          "p95_ms": 1.764352,
+          "samples": 90
+        }
+      },
+      {
+        "flow": {
+          "median_ms": 1.332224,
+          "p95_ms": 1.67424,
+          "samples": 90
+        },
+        "four_bursts": {
+          "median_ms": 4.2496,
+          "p95_ms": 5.63712,
+          "samples": 90
+        },
+        "part": {
+          "median_ms": 1.490944,
+          "p95_ms": 1.87392,
+          "samples": 90
+        }
+      }
+    ],
+    "after": [
+      {
+        "flow": {
+          "median_ms": 0.90112,
+          "p95_ms": 1.065984,
+          "samples": 90
+        },
+        "four_bursts": {
+          "median_ms": 1.39776,
+          "p95_ms": 1.844224,
+          "samples": 90
+        },
+        "part": {
+          "median_ms": 0.958464,
+          "p95_ms": 1.028096,
+          "samples": 90
+        }
+      },
+      {
+        "flow": {
+          "median_ms": 0.958464,
+          "p95_ms": 1.065984,
+          "samples": 90
+        },
+        "four_bursts": {
+          "median_ms": 1.437696,
+          "p95_ms": 1.75616,
+          "samples": 90
+        },
+        "part": {
+          "median_ms": 0.96256,
+          "p95_ms": 1.243136,
+          "samples": 90
+        }
+      }
+    ]
+  },
+  "trace_probes": {
+    "trace-d3d12-high": {
+      "median_frame_ms": 10.079,
+      "p95_frame_ms": 24.668,
+      "p99_frame_ms": 25.741,
+      "median_viewport_gpu_ms": 9.03600025177002,
+      "sample_sim_seconds": 4.99999999999998,
+      "samples": 428,
+      "slowest_5_percent": {
+        "frames": 22,
+        "with_simulation_step": 1,
+        "median_ms": {
+          "wall_ms": 25.064,
+          "post_draw_to_process_ms": 0.543,
+          "process_to_pre_draw_ms": 0.146,
+          "pre_to_post_draw_ms": 24.337,
+          "viewport_gpu_ms": 9.075
+        }
+      }
+    },
+    "trace-d3d12-performance": {
+      "median_frame_ms": 5.633,
+      "p95_frame_ms": 19.124,
+      "p99_frame_ms": 20.695,
+      "median_viewport_gpu_ms": 4.41200017929077,
+      "sample_sim_seconds": 4.99999999999998,
+      "samples": 740,
+      "slowest_5_percent": {
+        "frames": 37,
+        "with_simulation_step": 11,
+        "median_ms": {
+          "wall_ms": 20.17,
+          "post_draw_to_process_ms": 0.48,
+          "process_to_pre_draw_ms": 0.194,
+          "pre_to_post_draw_ms": 19.454,
+          "viewport_gpu_ms": 4.4
+        }
+      }
+    },
+    "trace-vulkan-high": {
+      "median_frame_ms": 5.469,
+      "p95_frame_ms": 20.506,
+      "p99_frame_ms": 22.051,
+      "median_viewport_gpu_ms": 4.50699996948242,
+      "sample_sim_seconds": 4.99999999999998,
+      "samples": 757,
+      "slowest_5_percent": {
+        "frames": 38,
+        "with_simulation_step": 8,
+        "median_ms": {
+          "wall_ms": 21.23,
+          "post_draw_to_process_ms": 0.4,
+          "process_to_pre_draw_ms": 0.113,
+          "pre_to_post_draw_ms": 20.54,
+          "viewport_gpu_ms": 4.53
+        }
+      }
+    },
+    "trace-vulkan-performance": {
+      "median_frame_ms": 3.438,
+      "p95_frame_ms": 7.569,
+      "p99_frame_ms": 19.462,
+      "median_viewport_gpu_ms": 2.57100009918213,
+      "sample_sim_seconds": 4.99999999999998,
+      "samples": 1159,
+      "slowest_5_percent": {
+        "frames": 58,
+        "with_simulation_step": 10,
+        "median_ms": {
+          "wall_ms": 18.538,
+          "post_draw_to_process_ms": 0.199,
+          "process_to_pre_draw_ms": 0.079,
+          "pre_to_post_draw_ms": 18.223,
+          "viewport_gpu_ms": 2.584
+        }
+      }
+    }
+  },
+  "default_window": {
+    "before": {
+      "framebuffer": "(1138.0, 712.0)",
+      "median_frame_ms": 9.635,
+      "median_viewport_gpu_ms": 7.61499977111816,
+      "monitor_refresh": 144.0,
+      "p95_frame_ms": 24.008,
+      "p95_viewport_gpu_ms": 8.92700004577637,
+      "p99_frame_ms": 29.924,
+      "sample_sim_seconds": 4.99999999999998,
+      "samples": 434,
+      "vsync": 1,
+      "window": "(1280, 800)"
+    },
+    "after": {
+      "framebuffer": "(1138.0, 712.0)",
+      "median_frame_ms": 9.374,
+      "median_viewport_gpu_ms": 7.61499977111816,
+      "monitor_refresh": 144.0,
+      "p95_frame_ms": 24.89,
+      "p95_viewport_gpu_ms": 8.97599983215332,
+      "p99_frame_ms": 32.101,
+      "sample_sim_seconds": 4.99999999999998,
+      "samples": 430,
+      "vsync": 1,
+      "window": "(1280, 800)"
+    },
+    "after_vulkan": {
+      "framebuffer": "(1138.0, 712.0)",
+      "median_frame_ms": 8.265,
+      "median_viewport_gpu_ms": 3.33400011062622,
+      "monitor_refresh": 144.0,
+      "p95_frame_ms": 26.053,
+      "p95_viewport_gpu_ms": 4.30900001525879,
+      "p99_frame_ms": 31.975,
+      "sample_sim_seconds": 4.99999999999998,
+      "samples": 439,
+      "vsync": 1,
+      "window": "(1280, 800)"
+    }
+  },
+  "correctness": {
+    "after_projection_ratio": 0.7559,
+    "four_vs_single_max_local_density_error": 0.0,
+    "fixed_close_high_quality_ssim": 0.999523,
+    "d3d12_checks": {
+      "flow_transport": 16,
+      "flow_part": 19,
+      "flow_expansion": 21,
+      "gpu_smoke": 25,
+      "field_map": 18,
+      "fog_detail": 7,
+      "editor_smoke": 12
+    },
+    "vulkan_checks": {
+      "flow_transport": 16,
+      "flow_part": 19,
+      "flow_expansion": 21,
+      "gpu_smoke": 25
+    }
+  },
+  "vulkan_performance_repeat": {
+    "adapter": "NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+    "camera": "close",
+    "density_resolution": 512,
+    "elapsed_process_frames": 1739,
+    "expansion": false,
+    "flow_only": false,
+    "four_bursts": false,
+    "godot": "4.7.2-stable (official)",
+    "max_cut_segments": 0,
+    "max_frame_ms": 20.625,
+    "median_frame_ms": 3.179,
+    "median_viewport_gpu_ms": 2.41300010681152,
+    "obstacles_disabled": false,
+    "p95_frame_ms": 6.153,
+    "p95_viewport_gpu_ms": 2.86999988555908,
+    "p99_frame_ms": 18.556,
+    "parting": false,
+    "resolution": [
+      1920,
+      1080
+    ],
+    "sample_elapsed_seconds": 5.002935,
+    "sample_sim_seconds": 4.99999999999998,
+    "samples": 1253,
+    "simulation_time": 6.99999999999998,
+    "velocity_resolution": 256,
+    "volume_depth": 128,
+    "volume_size": 224
+  },
+  "measurement_note": "GPU timestamp deltas converted from nanoseconds to milliseconds as in Godot 4.7.2 RenderingServerDefault. Per-frame viewport counters can lag. The separate slow-frame buckets use observations from the same polling frame, not a synchronized GPU fence.",
+  "texture_allocation_MiB": {
+    "before": 23.5,
+    "after": 22.5,
+    "scope": "Logical allocation for simulation image textures at 256/512. Excludes engine, froxels and driver allocation overhead."
+  }
+}

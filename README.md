@@ -51,13 +51,15 @@ flowchart TD
 
 冲击密度使用 MC 限制斜率重建与通量差更新，子步按 CFL 0.4 自动细分。内部密度和预测纹理为单通道 R32F，避免多子步反复量化；对渲染与场图的展示接口仍为 RGBA16F。正常流动仍走原有的高阶 MacCormack 搬运。冲击还向常规流场注入少量旋流，使波前在冲击结束后继续变形。
 
-最多同时处理 4 个冲击，每主时间步最多 64 个冲击子步。极小区域、高分辨率或极端重叠触及子步上限时，会按 CFL 约束削弱冲击速度。密度安全上限默认为 16，达到上限时会损失部分雾量；常规参数下的单次均匀雾扩散验收，二维密度积分误差约 0.003%。原理参考：[Clawpack 的有限体积与通量方法](https://www.clawpack.org/v5.3.x/wp_algorithms.html)。
+最多同时处理 4 个径向冲击。带采样边缘的作用矩形相交时合并，每组每主时间步最多 64 个 CFL 子步。分散的冲击独立计算速度上限。极小区域、高分辨率或极端重叠触及子步上限时，会按 CFL 约束削弱冲击速度。密度安全上限默认为 16，达到上限时会损失部分雾量；常规参数下的单次均匀雾扩散验收，二维密度积分误差约 0.003%。原理参考：[Clawpack 的有限体积与通量方法](https://www.clawpack.org/v5.3.x/wp_algorithms.html)。
 
 ### 沿路径划开
 
 划开使用覆盖完整拖动线段的短时速度场，把雾拨向路径两侧。它与径向扩散共用有限体积搬运，密度和三维纹理坐标一起移动，不删除雾量。作用结束后保留疏密历史，由原有风和流动继续搬运、自然补位。切换工具、进入面板或松开左键会结束当前笔划，不跨越下一次输入连接路径。
 
-默认半径 0.65 m、峰值速度 3 m/s、作用时间 0.3 s，主场景根节点可调整。最多保留 16 段轨迹，重叠路径取局部最强作用，避免移动缓慢时累加出过大速度。障碍检查只在作用范围内进行；两份状态先同步一次，后续 CFL 子步仅更新范围内的单元，保留区域外状态与原有流动。
+默认半径 0.65 m、峰值速度 3 m/s、作用时间 0.3 s，主场景根节点可调整。最多保留 16 段轨迹，重叠路径取局部最强作用，避免移动缓慢时累加出过大速度。冲击速度与密度搬运都只派发到组内矩形。偶数子步直接写回当前状态，奇数子步只回拷本组矩形。
+
+面板的 **Fog quality** 可切换 High（项目默认 288 / 192）和 Performance（224 / 128）。它调整整个渲染器的体积网格。切换时保留速度、密度分辨率和已有交互历史。
 
 ## 参数与编辑器
 
@@ -114,9 +116,9 @@ $FogField.part(Vector3(-2, 0, 1), Vector3(2, 0, 1), 0.65, 3.0, 0.3)
 - `fog/fog_simulation_gpu.gd`：GPU 资源与计算阶段的唯一拥有者。
 - `fog/fog_field.gd`：场景接口、固定步、参数和交互收集。
 - `fog/shaders/fluid_common.glslinc`：共享布局、MAC 采样、回溯与密度重建。
-- `velocity / divergence / pressure / project_velocity.glsl`：速度与压力求解。
+- `velocity / divergence / pressure_topology / pressure / project_velocity.glsl`：速度与压力求解。
 - `density_predict / simulate.glsl`：密度预测校正与材质坐标搬运。
-- `shock_field / shock_seed / shock_transport.glsl`：扩散与划开速度场、区域外状态同步、局部有限体积搬运。
+- `shock_field / shock_seed / shock_transport.glsl`：扩散与划开速度场、奇数子步的局部回拷、有限体积搬运。
 - `build_obstacles.glsl`：几何变化时重建距离与法线。
 - `ground_fog.gdshader`：从共享状态重建三维外观。
 - `demo/`：角色、相机、灯光、笔刷和场图。
@@ -144,6 +146,9 @@ godot --path . --script res://tests/flow_budget.gd -- --close
 godot --path . --script res://tests/flow_budget.gd -- --flow-only
 godot --path . --script res://tests/flow_budget.gd -- --close --burst
 godot --path . --script res://tests/flow_budget.gd -- --close --part
+godot --path . --script res://tests/flow_budget.gd -- --close --four-bursts --trace
+godot --path . --script res://tests/flow_budget.gd -- --close --performance --trace
+godot --path . --script res://tests/flow_compute_budget.gd
 
 # 固定步动态捕捉，105 帧 / 15 FPS / 7 秒。
 godot --path . --fixed-fps 60 --script res://tests/flow_capture.gd
@@ -174,12 +179,32 @@ ffmpeg -framerate 15 -i artifacts/part/frames/%03d.png -c:v libx264 -crf 18 -pix
 
 划开模式在同机 1080p 近景持续拖动、最多 8 段同时作用的预算测试中，中位数 10.627 ms、P95 12.368 ms、最慢帧 13.335 ms。条件为预热 2 秒模拟时间后采样约 5 秒；见 `budget-full-close-part.json`，不涵盖任意长线段或多交互器同时划开的最坏情况。
 
+### 逐帧与单步计时
+
+预算脚本的 `--trace` 会在采样结束后写入 `artifacts/flow-transport/frames-*.csv`。每一行保留观测帧号、墙钟间隔、process_frame / frame_pre_draw / frame_post_draw 三个信号之间的耗时、是否提交了固定步，以及引擎最近返回的渲染准备、视口 CPU / GPU 时间。GPU 查询有延迟，呈现等待也可能落在这些区间中。保持相同窗口条件比较长帧，各列不能简单相减作为 Present 耗时。
+
+`flow_compute_budget.gd` 在真实渲染线程上给模拟提交前后各放一个 GPU 时间戳。常规流动、持续划开、四个分散冲击各预热 15 步、采样 90 步。这个探针关闭体积雾，GPU 时间戳差值沿用 [Godot 4.7.2 引擎的毫秒换算](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/rendering/rendering_server_default.cpp#L142-L146)，单步时间与整帧预算分别报告。
+
+### 优化前后对比
+
+以提交 `3d833ba` 为基线，在同一台 RTX 3050 Ti Laptop 上使用 Godot 4.7.2 / D3D12。下表取两轮测量各自统计量的算术平均值，单位为毫秒。整帧测试使用固定 1080p 近景，单步测试保留 256² 速度、512² 密度与 64 次压力迭代。
+
+| 场景 | 改前中位数 | 改后中位数 | 改前 P95 | 改后 P95 |
+| --- | ---: | ---: | ---: | ---: |
+| 常规流动，GPU 单步 | 1.362 | 0.930 | 1.735 | 1.066 |
+| 连续划开，GPU 单步 | 1.461 | 0.961 | 1.819 | 1.136 |
+| 四个分散冲击，GPU 单步 | 4.214 | 1.418 | 5.510 | 1.800 |
+| High，整帧 | 10.45 | 10.12 | 25.12 | 24.90 |
+| 224 / 128，整帧（基线手动设为相同网格） | 5.50 | 5.40 | 19.43 | 19.32 |
+
+同画质下 GPU 单步变快，高画质整帧仍主要受体积渲染影响。单独对改后版本做详细追踪时，D3D12 High 最慢的 22 帧中仅 1 帧推进模拟，渲染前到渲染后信号之间的中位耗时为 24.34 ms。Windows 上可用 `godot --path . --rendering-driver vulkan` 试用 Vulkan Forward+。本机 Vulkan Performance 两次离屏近景的 P95 为 6.15 / 7.57 ms，P99 为 18.56 / 19.46 ms。真实窗口启用垂直同步时的结果另列在[完整对照数据](artifacts/flow-transport/optimization-comparison.json)。
+
 ## 成本与限制
 
-默认 256² 速度 / 512² 密度的模拟纹理约 23.5 MiB，另有噪声、体积雾 froxel、阴影及引擎资源。所有计算留在主 RenderingDevice；CPU 只提交少量参数，无每帧 readback、submit 或 sync。最多 32 个障碍、单步 16 个常规作用、同时 4 个径向冲击及 16 段划开路径。
+默认 256² 速度 / 512² 密度的模拟纹理约 22.5 MiB，另有噪声、体积雾 froxel、阴影及引擎资源。所有计算留在主 RenderingDevice；CPU 只提交少量参数，无每帧 readback、submit 或 sync。最多 32 个障碍、单步 16 个常规作用、同时 4 个径向冲击及 16 段划开路径。
 
-项目体积雾为 Volume Size 288 / Depth 192、关闭空间滤波，时间重投影为 0.75。连续复测时 320 的近景 P95 曾达到 17.3 ms，因此只小幅降低体积横向采样，保留速度和密度精度。这些选项明显影响细节、闪烁和拖影。近景细丝受最终 froxel 分辨率限制；加密二维场无法单独突破渲染采样上限。需要省性能时先降低 Volume Size / Depth 或减少参与雾的动态灯，再按目标涡尺度调整速度分辨率。
+项目体积雾为 Volume Size 288 / Depth 192、关闭空间滤波，时间重投影为 0.75。连续复测时 320 的近景 P95 曾达到 17.3 ms，因此只小幅降低体积横向采样，保留速度和密度精度。这些选项明显影响细节、闪烁和拖影。近景细丝受最终 froxel 分辨率限制；加密二维场无法单独突破渲染采样上限。可优先切换 Performance 体积网格，再按需要分辨的涡旋尺度调整速度分辨率。
 
 本模型是二维水平流动加三维外观，不求解上下穿插、真实三维翻卷或浅水自由表面。压力迭代、极值限制、开放边界和源项都可能引入守恒误差。快速移动障碍当前更新遮罩，连续推雾应同时配置交互器。极低帧率下每画面最多推进一步，会主动放慢模拟，避免作业堆积。
 
-本机离屏预算检查不能代替其他显卡、后端或真实窗口的验收；尚未验证这些环境。
+本轮包含这张显卡上的 D3D12 / Vulkan 和默认窗口检查。其他显卡、驱动及窗口呈现条件仍需单独测量。

@@ -7,5 +7,6 @@
 /artifacts/editor-save-check.tscn
 /artifacts/fog-detail/*.log
 /artifacts/flow-transport/frames/
+/artifacts/flow-transport/frames-*.csv
 /artifacts/expansion/frames/
 /artifacts/part/frames/

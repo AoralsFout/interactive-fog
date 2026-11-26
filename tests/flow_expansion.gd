@@ -92,6 +92,28 @@ func _run() -> void:
 	await _steps(25)
 	_check(_bounded(_state()), "overlapping waves remain stable and bounded")
 	await _reset()
+	# A distant pulse must not change a local pulse's CFL step count or weaken its front.
+	var first_center := Vector3(-6.0, 0.0, -4.0)
+	_field.burst(first_center, 3.0, 0.65, 1.0, 0.0)
+	await _steps(14)
+	var isolated := _state()
+	var coords := _field.get_coordinate_texture()
+	var isolated_marker := _sample(coords.get_image(), Vector2(-4.0, -4.0))
+	await _reset()
+	for x in [-6.0, 6.0]:
+		for z in [-4.0, 4.0]:
+			_field.burst(Vector3(x, 0.0, z), 3.0, 0.65, 1.0, 0.0)
+	await _steps(14)
+	var separated := _state()
+	var max_error := 0.0
+	for x in range(50, 205, 2):
+		for y in range(85, 215, 2):
+			max_error = maxf(max_error, absf(isolated.get_pixel(x, y).r - separated.get_pixel(x, y).r))
+	_check(max_error < 0.001, "disjoint shocks preserve the isolated density profile: %.6f" % max_error)
+	var grouped_marker := _sample(coords.get_image(), Vector2(-4.0, -4.0))
+	_check(absf(grouped_marker.r - isolated_marker.r) < 0.001, "retained coordinate texture tracks regional updates")
+	_check(absf(_mass(separated) / mass_before - 1.0) < 0.0005, "disjoint shock regions conserve total density")
+	await _reset()
 	var edge_before := _mass(_state())
 	_field.burst(Vector3(-10.5, 0, 0), 3.0, 0.65, 1.0, 0.0)
 	await _steps(20)

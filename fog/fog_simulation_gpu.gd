@@ -16,6 +16,7 @@ const SHADERS := {
 	"obstacles": preload("res://fog/shaders/build_obstacles.glsl"),
 	"velocity": preload("res://fog/shaders/velocity.glsl"),
 	"divergence": preload("res://fog/shaders/divergence.glsl"),
+	"topology": preload("res://fog/shaders/pressure_topology.glsl"),
 	"pressure": preload("res://fog/shaders/pressure.glsl"),
 	"project": preload("res://fog/shaders/project_velocity.glsl"),
 	"predict": preload("res://fog/shaders/density_predict.glsl"),
@@ -24,6 +25,14 @@ const SHADERS := {
 	"shock_seed": preload("res://fog/shaders/shock_seed.glsl"),
 	"shock_transport": preload("res://fog/shaders/shock_transport.glsl"),
 }
+
+# Each region owns a disjoint padded rectangle and a conservative local CFL bound.
+class ShockRegion:
+	var rect: Rect2i
+	var members: int
+	var burst_speed := 0.0
+	var cut_speed := 0.0
+
 
 var state_texture := Texture2DRD.new()
 var obstacle_texture := Texture2DRD.new()
@@ -53,9 +62,10 @@ var _before_projection := RID()
 var _after_projection := RID()
 var _predicted := RID()
 var _display := RID()
-var _display_coordinates := RID()
+var _backtrace_uv := RID()
 var _read := 0
 var _pressure_read := 0
+var _pressure_sets: Array[RID] = []
 var _ready_on_gpu := false
 
 
@@ -66,7 +76,7 @@ func start(resolution: int, density_resolution: int) -> void:
 func advance(parameters: PackedFloat32Array, stamps: PackedFloat32Array,
 		obstacles: PackedFloat32Array, rebuild: bool, iterations: int, shocks: PackedFloat32Array) -> void:
 	RenderingServer.call_on_render_thread(_advance.bind(
-		parameters.to_byte_array(), stamps.to_byte_array(), obstacles.to_byte_array(), rebuild, iterations, shocks.to_byte_array()))
+		parameters.to_byte_array(), stamps.to_byte_array(), obstacles.to_byte_array() if rebuild else PackedByteArray(), rebuild, iterations, shocks.to_byte_array()))
 
 
 func shutdown() -> void:
@@ -158,12 +168,16 @@ func _initialize(resolution: int, density_resolution: int) -> void:
 	_predicted = _texture(_density_resolution, RenderingDevice.DATA_FORMAT_R32_SFLOAT)
 	_shock_velocity = _texture(_density_resolution)
 	_display = _texture(_density_resolution)
-	_display_coordinates = _texture(_density_resolution, RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT)
+	_backtrace_uv = _texture(_density_resolution, RenderingDevice.DATA_FORMAT_R32G32_SFLOAT)
 	for index in range(2):
 		_states.append(_texture(_density_resolution, RenderingDevice.DATA_FORMAT_R32_SFLOAT))
 		_coordinates.append(_texture(_density_resolution, RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT))
 		_pressures.append(_texture(_resolution, RenderingDevice.DATA_FORMAT_R32_SFLOAT))
 
+	var topology := _texture(_resolution, RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT)
+	var topology_uniforms := _common(_velocity)
+	topology_uniforms.append(_image(3, topology))
+	_sets["topology"] = _make_set("topology", topology_uniforms)
 	_sets["obstacles"] = _make_set("obstacles", [_image(0, _mask), _buffer(1, _parameters), _buffer(2, _obstacles)])
 	var uniforms := _common(_velocity)
 	uniforms.append_array([_image(3, _working_velocity), _buffer(4, _stamps), _sample(5, _after_projection)])
@@ -178,26 +192,25 @@ func _initialize(resolution: int, density_resolution: int) -> void:
 	uniforms.append_array([_buffer(3, _shocks), _image(4, _shock_velocity)])
 	_sets["shock_field"] = _make_set("shock_field", uniforms)
 	for index in range(2):
-		uniforms = _common(_working_velocity)
-		uniforms.append_array([_sample(3, _before_projection), _sample(4, _pressures[index]), _image(5, _pressures[1 - index])])
-		_sets["pressure%d" % index] = _make_set("pressure", uniforms)
+		_pressure_sets.append(_make_set("pressure", [_sample(0, topology), _sample(1, _before_projection),
+			_sample(2, _pressures[index]), _image(3, _pressures[1 - index])]))
 		uniforms = _common(_working_velocity)
 		uniforms.append_array([_sample(3, _pressures[index]), _image(4, _velocity)])
 		_sets["project%d" % index] = _make_set("project", uniforms)
 		uniforms = _common(_velocity)
-		uniforms.append_array([_sample(3, _states[index]), _image(4, _predicted)])
+		uniforms.append_array([_sample(3, _states[index]), _image(4, _predicted), _image(5, _backtrace_uv)])
 		_sets["predict%d" % index] = _make_set("predict", uniforms)
 		uniforms = _common(_velocity)
 		uniforms.append_array([
 			_sample(3, _states[index]), _sample(4, _predicted), _sample(5, _coordinates[index]),
 			_image(6, _states[1 - index]), _image(7, _coordinates[1 - index]),
-			_image(8, _display), _image(9, _display_coordinates)])
+			_image(8, _display), _sample(9, _backtrace_uv)])
 		_sets["transport%d" % index] = _make_set("transport", uniforms)
 		uniforms = _common(_shock_velocity)
 		uniforms.append_array([
 			_sample(3, _states[index]), _sample(4, _coordinates[index]),
 			_image(5, _states[1 - index]), _image(6, _coordinates[1 - index]),
-			_image(7, _display), _image(8, _display_coordinates)])
+			_image(7, _display)])
 		_sets["shock_transport%d" % index] = _make_set("shock_transport", uniforms)
 		_sets["shock_seed%d" % index] = _make_set("shock_seed", [
 			_sample(3, _states[index]), _sample(4, _coordinates[index]),
@@ -209,7 +222,7 @@ func _initialize(resolution: int, density_resolution: int) -> void:
 			return
 	state_texture.texture_rd_rid = _display
 	obstacle_texture.texture_rd_rid = _mask
-	coordinate_texture.texture_rd_rid = _display_coordinates
+	coordinate_texture.texture_rd_rid = _coordinates[_read]
 	diagnostics_texture.texture_rd_rid = _after_projection
 	_ready_on_gpu = true
 
@@ -229,32 +242,7 @@ func _advance(parameters: PackedByteArray, stamps: PackedByteArray,
 		obstacles: PackedByteArray, rebuild: bool, iterations: int, shocks: PackedByteArray) -> void:
 	if not _ready_on_gpu:
 		return
-	var peak := 0.0
-	var cut_peak := 0.0
-	var bounds_min := Vector2(INF, INF)
-	var bounds_max := Vector2(-INF, -INF)
-	for offset in range(0, shocks.size(), SHOCK_FLOAT_COUNT * 4):
-		var start := Vector2(shocks.decode_float(offset), shocks.decode_float(offset + 4))
-		var radius := shocks.decode_float(offset + 8)
-		if shocks.decode_float(offset + 24) > 0.5:
-			cut_peak = maxf(cut_peak, absf(shocks.decode_float(offset + 12)))
-			var end := Vector2(shocks.decode_float(offset + 16), shocks.decode_float(offset + 20))
-			bounds_min = bounds_min.min(start.min(end) - Vector2.ONE * radius)
-			bounds_max = bounds_max.max(start.max(end) + Vector2.ONE * radius)
-		else:
-			peak += absf(shocks.decode_float(offset + 12))
-			var support := radius + shocks.decode_float(offset + 16)
-			bounds_min = bounds_min.min(start - Vector2.ONE * support)
-			bounds_max = bounds_max.max(start + Vector2.ONE * support)
-	# 划开段取局部最强作用，不相加；连续路径重叠不会叠出过大速度。
-	peak += cut_peak
 	var dt := parameters.decode_float(32)
-	var cell := minf(parameters.decode_float(0), parameters.decode_float(4)) / _density_resolution
-	# 两个 MAC 面分量可能在不同位置取到峰值，用逐轴上界约束 CFL。
-	var desired_steps := maxi(1, ceili(dt * peak * 2.0 / (cell * 0.4)))
-	var substeps := mini(desired_steps, MAX_SHOCK_SUBSTEPS)
-	# 保持 CFL 安全；极端重叠或很小区域时削弱冲击，而不是提交无界 GPU 子步。
-	parameters.encode_float(104, minf(1.0, float(substeps) / desired_steps))
 	_rd.buffer_update(_parameters, 0, parameters.size(), parameters)
 	if not stamps.is_empty():
 		_rd.buffer_update(_stamps, 0, stamps.size(), stamps)
@@ -270,39 +258,94 @@ func _advance(parameters: PackedByteArray, stamps: PackedByteArray,
 	var list := _rd.compute_list_begin()
 	if rebuild:
 		_dispatch(list, "obstacles", _sets["obstacles"], _density_resolution)
+		_dispatch(list, "topology", _sets["topology"], _resolution)
 	_dispatch(list, "velocity", _sets["velocity"], _resolution)
 	_dispatch(list, "divergence", _sets["divergence"], _resolution)
+	var groups := ceili(_resolution / 8.0)
+	_rd.compute_list_bind_compute_pipeline(list, _pipelines["pressure"])
 	for index in range(iterations):
-		_dispatch(list, "pressure", _sets["pressure%d" % _pressure_read], _resolution)
+		_rd.compute_list_bind_uniform_set(list, _pressure_sets[_pressure_read], 0)
+		_rd.compute_list_dispatch(list, groups, groups, 1)
+		_rd.compute_list_add_barrier(list)
 		_pressure_read = 1 - _pressure_read
 	_dispatch(list, "project", _sets["project%d" % _pressure_read], _resolution)
 	_dispatch(list, "divergence", _sets["diagnostics"], _resolution)
 	_dispatch(list, "predict", _sets["predict%d" % _read], _density_resolution)
 	_dispatch(list, "transport", _sets["transport%d" % _read], _density_resolution)
 	_read = 1 - _read
-	if peak > 0.000001 and dt > 0.0:
-		var margin := maxf(parameters.decode_float(0), parameters.decode_float(4)) / _density_resolution * 2.0
-		var bounds := PackedFloat32Array([bounds_min.x - margin, bounds_min.y - margin, bounds_max.x + margin, bounds_max.y + margin]).to_byte_array()
-		_dispatch(list, "shock_field", _sets["shock_field"], _density_resolution, bounds)
-		var region := Vector2(parameters.decode_float(0), parameters.decode_float(4))
+	if not shocks.is_empty() and dt > 0.0:
+		var area := Vector2(parameters.decode_float(0), parameters.decode_float(4))
 		var center := Vector2(parameters.decode_float(8), parameters.decode_float(12))
-		var low := ((bounds_min - Vector2.ONE * margin - center) / region + Vector2.ONE * 0.5) * _density_resolution
-		var high := ((bounds_max + Vector2.ONE * margin - center) / region + Vector2.ONE * 0.5) * _density_resolution
-		var origin := Vector2i(low.floor()).clamp(Vector2i.ZERO, Vector2i.ONE * (_density_resolution - 1))
-		var extent := Vector2i(high.ceil()).clamp(origin + Vector2i.ONE, Vector2i.ONE * _density_resolution) - origin
-		_dispatch(list, "shock_seed", _sets["shock_seed%d" % _read], _density_resolution, PackedInt32Array([0, 0, 0, 0]).to_byte_array())
-		var push := PackedByteArray()
-		push.resize(32)
-		push.encode_float(0, dt / substeps)
-		push.encode_s32(8, origin.x)
-		push.encode_s32(12, origin.y)
-		push.encode_s32(16, extent.x)
-		push.encode_s32(20, extent.y)
-		for index in range(substeps):
-			push.encode_s32(4, 1 if index == substeps - 1 else 0)
-			_dispatch(list, "shock_transport", _sets["shock_transport%d" % _read], _density_resolution, push, extent)
-			_read = 1 - _read
+		var cell := minf(area.x, area.y) / _density_resolution
+		for region in _shock_regions(shocks, area, center, cell):
+			_transport_region(list, region, dt, cell)
 	_rd.compute_list_end()
+	coordinate_texture.texture_rd_rid = _coordinates[_read]
+
+
+func _shock_regions(shocks: PackedByteArray, area: Vector2, center: Vector2, cell: float) -> Array[ShockRegion]:
+	var regions: Array[ShockRegion] = []
+	var domain := Rect2i(0, 0, _density_resolution, _density_resolution)
+	for i in range(shocks.size() / (SHOCK_FLOAT_COUNT * 4)):
+		var offset := i * SHOCK_FLOAT_COUNT * 4
+		var speed := absf(shocks.decode_float(offset + 12))
+		if speed <= 0.000001:
+			continue
+		var point := Vector2(shocks.decode_float(offset), shocks.decode_float(offset + 4))
+		var endpoint := point
+		var radius := shocks.decode_float(offset + 8)
+		var region := ShockRegion.new()
+		if shocks.decode_float(offset + 24) > 0.5:
+			endpoint = Vector2(shocks.decode_float(offset + 16), shocks.decode_float(offset + 20))
+			radius = maxf(radius, 2.0 * cell)
+			region.cut_speed = speed
+		else:
+			radius = maxf(radius, cell) + maxf(shocks.decode_float(offset + 16), 2.0 * cell)
+			region.burst_speed = speed
+		var low := ((point.min(endpoint) - Vector2.ONE * radius - center) / area + Vector2.ONE * 0.5) * _density_resolution
+		var high := ((point.max(endpoint) + Vector2.ONE * radius - center) / area + Vector2.ONE * 0.5) * _density_resolution
+		var origin := Vector2i(low.floor())
+		# Three cells cover MAC face interpolation and the two-cell flux stencil.
+		region.rect = Rect2i(origin, Vector2i(high.ceil()) - origin).grow(3).intersection(domain)
+		if not region.rect.has_area():
+			continue
+		region.members = 1 << i
+		# A union can bridge previously disjoint regions. Restart after every merge.
+		var j := 0
+		while j < regions.size():
+			var other := regions[j]
+			if not region.rect.intersects(other.rect):
+				j += 1
+				continue
+			region.rect = region.rect.merge(other.rect)
+			region.members |= other.members
+			region.burst_speed += other.burst_speed
+			region.cut_speed = maxf(region.cut_speed, other.cut_speed)
+			regions.remove_at(j)
+			j = 0
+		regions.append(region)
+	return regions
+
+
+func _transport_region(list: int, region: ShockRegion, dt: float, cell: float) -> void:
+	var desired := maxi(1, ceili(dt * (region.burst_speed + region.cut_speed) * 2.0 / (cell * 0.4)))
+	var steps := mini(desired, MAX_SHOCK_SUBSTEPS)
+	var rect := region.rect
+	var field_push := PackedInt32Array([rect.position.x, rect.position.y, rect.size.x, rect.size.y,
+		region.members, 0, 0, 0]).to_byte_array()
+	field_push.encode_float(20, float(steps) / desired)
+	_dispatch(list, "shock_field", _sets["shock_field"], _density_resolution, field_push, rect.size)
+	var push := PackedInt32Array([0, 0, rect.position.x, rect.position.y, rect.size.x, rect.size.y, 0, 0]).to_byte_array()
+	push.encode_float(0, dt / steps)
+	var read_index := _read
+	for i in range(steps):
+		push.encode_s32(4, int(i == steps - 1))
+		_dispatch(list, "shock_transport", _sets["shock_transport%d" % read_index], _density_resolution, push, rect.size)
+		read_index = 1 - read_index
+	# The canonical texture already holds all other regions. Copy back only an odd result.
+	if read_index != _read:
+		var copy_push := PackedInt32Array([rect.position.x, rect.position.y, rect.size.x, rect.size.y]).to_byte_array()
+		_dispatch(list, "shock_seed", _sets["shock_seed%d" % read_index], _density_resolution, copy_push, rect.size)
 
 
 func _release() -> void:
@@ -319,6 +362,7 @@ func _release() -> void:
 	_states.clear()
 	_coordinates.clear()
 	_pressures.clear()
+	_pressure_sets.clear()
 	_sets.clear()
 	_shaders.clear()
 	_pipelines.clear()

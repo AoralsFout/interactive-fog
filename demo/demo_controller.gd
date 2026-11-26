@@ -19,13 +19,29 @@ enum BrushMode { STIR, PART }
 @export_node_path("Node3D") var brush_path := NodePath("MouseBrush")
 @export_node_path("Node3D") var player_path := NodePath("Player")
 @export_group("鼠标推雾")
-@export_range(0.2, 5.0, 0.1, "suffix:m") var brush_radius := 1.4
+@export_range(0.2, 5.0, 0.1, "suffix:m") var brush_radius := 1.4:
+	set(value):
+		brush_radius = value
+		if is_node_ready():
+			_sync_brush_shape()
 ## 单击注入偏心卷流；拖动则由笔刷的实际世界速度持续施力。
 @export_range(0.0, 8.0, 0.1) var brush_click_swirl := 2.0
 @export_group("鼠标划开")
-@export_range(0.15, 2.0, 0.05, "suffix:m") var part_radius := 0.65
-@export_range(0.0, 6.0, 0.1, "suffix:m/s") var part_speed := 3.0
-@export_range(0.1, 0.8, 0.05, "suffix:s") var part_duration := 0.3
+@export_range(0.15, 2.0, 0.05, "suffix:m") var part_radius := 0.65:
+	set(value):
+		part_radius = value
+		if is_node_ready():
+			_sync_brush_shape()
+@export_range(0.0, 6.0, 0.1, "suffix:m/s") var part_speed := 3.0:
+	set(value):
+		part_speed = value
+		if is_node_ready():
+			_sync_brush_shape()
+@export_range(0.1, 0.8, 0.05, "suffix:s") var part_duration := 0.3:
+	set(value):
+		part_duration = value
+		if is_node_ready():
+			_sync_brush_shape()
 @export_group("空格径向扩散")
 @export_range(0.5, 8.0, 0.1, "suffix:m") var burst_radius := 3.0
 @export_range(0.0, 2.0, 0.05) var burst_strength := 1.0
@@ -99,7 +115,6 @@ func _update_brush() -> void:
 		_painting = false
 	_brush.visible = _valid_brush and not over_panel
 	_brush_interactor.enabled = _valid_brush and _painting and not over_panel
-	_sync_brush_shape()
 
 
 func _unhandled_input(event: InputEvent) -> void:

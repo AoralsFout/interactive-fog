@@ -97,6 +97,18 @@ func _run() -> void:
 	_field.simulation_enabled = false
 	await _frames(4)
 	var fog_on := root.get_texture().get_image()
+	var high_grid := hud.fog_grid
+	var retained := _field.get_coordinate_texture()
+	var frozen := retained.get_image().get_data()
+	var selector := hud.get_node("%FogQuality") as OptionButton
+	selector.item_selected.emit(1)
+	await _frames(8)
+	_check(hud.fog_grid == FogDemoHUD.PERFORMANCE_GRID and selector.selected == 1, "quality selector applies performance grid")
+	_check(_image_difference(fog_on, root.get_texture().get_image()) > 0.0001, "quality switch changes the rendered fog grid")
+	selector.item_selected.emit(0)
+	await _frames(4)
+	_check(hud.fog_grid == high_grid and retained.get_image().get_data() == frozen,
+		"restoring high quality keeps the frozen material coordinates")
 	_field.settings.density = 0.0
 	await _frames(4)
 	var density_zero := root.get_texture().get_image()

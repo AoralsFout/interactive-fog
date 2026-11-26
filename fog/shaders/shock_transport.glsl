@@ -9,7 +9,6 @@ layout(set=0,binding=4) uniform sampler2D previous_coordinates;
 layout(r32f,set=0,binding=5) uniform writeonly image2D next_state;
 layout(rgba32f,set=0,binding=6) uniform writeonly image2D next_coordinates;
 layout(rgba16f,set=0,binding=7) uniform writeonly image2D display_state;
-layout(rgba32f,set=0,binding=8) uniform writeonly image2D display_coordinates;
 layout(push_constant,std430) uniform Substep { float dt; int final_step; ivec2 origin; ivec2 extent; ivec2 padding; } substep;
 
 float scalar(ivec2 id) {
@@ -45,6 +44,9 @@ void main() {
     vec4 velocity_data=texelFetch(velocity_map,id,0);
     float left=id.x>0 ? texelFetch(velocity_map,id-ivec2(1,0),0).r : velocity_data.r;
     float top=id.y>0 ? texelFetch(velocity_map,id-ivec2(0,1),0).g : velocity_data.g;
+    // The velocity image outside this dispatch may belong to an earlier region.
+    if(local_id.x==0 && id.x>0) { left=0.0; }
+    if(local_id.y==0 && id.y>0) { top=0.0; }
     float flux_activity=abs(velocity_data.r)+abs(velocity_data.g)+abs(left)+abs(top);
     if(flux_activity>0.000001 && solid_distance(uv)>0.0) {
         float delta_x=flux(id,ivec2(1,0),velocity_data.r,cell.x)-flux(id-ivec2(1,0),ivec2(1,0),left,cell.x);
@@ -54,12 +56,11 @@ void main() {
         coordinates=textureLod(previous_coordinates,clamp(backtrace(uv,substep.dt),vec2(0),vec2(1)),0);
     }
     if(solid_distance(uv)<=0.0) { state.r=0.0; }
-    state.gb=velocity_data.ba+velocity_at(uv);
-    state.a=0.0;
     imageStore(next_state,id,state);
     imageStore(next_coordinates,id,coordinates);
     if(substep.final_step!=0) {
+        state.gb=velocity_data.ba+0.5*(velocity_data.rg+vec2(left,top));
+        state.a=0.0;
         imageStore(display_state,id,state);
-        imageStore(display_coordinates,id,coordinates);
     }
 }

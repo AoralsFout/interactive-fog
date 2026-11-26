@@ -6,7 +6,7 @@ layout(local_size_x=8,local_size_y=8,local_size_z=1) in;
 struct Shock { vec4 front; vec4 shape; };
 layout(std430,set=0,binding=3) readonly buffer Shocks { Shock items[]; } shocks;
 layout(rgba16f,set=0,binding=4) uniform writeonly image2D shock_velocity;
-layout(push_constant,std430) uniform ActiveBounds { vec4 region; } active_bounds;
+layout(push_constant,std430) uniform ActiveBounds { ivec2 origin; ivec2 extent; int members; float scale; ivec2 pad; } active_bounds;
 
 // 对每个主时间步只构建一次可见性，子步复用此速度纹理。
 float visible_from(vec2 center,vec2 target,float cell) {
@@ -32,6 +32,7 @@ vec2 impulse_at(vec2 uv,float cell) {
     vec2 cut_velocity=vec2(0);
     float best_cut=0.0;
     for(int i=0;i<int(params.solver.y);i++) {
+        if ((active_bounds.members & (1 << i)) == 0) { continue; }
         Shock s=shocks.items[i];
         if(s.shape.z>0.5) {
             vec2 segment=s.shape.xy-s.front.xy;
@@ -56,22 +57,17 @@ vec2 impulse_at(vec2 uv,float cell) {
         float speed=s.front.w*min(r/radius,1.0)*taper;
         result+=delta/max(r,0.0001)*speed*visible_from(s.front.xy,p,cell);
     }
-    result=(result+cut_velocity)*params.solver.z;
+    result=(result+cut_velocity)*active_bounds.scale;
     vec3 obstacle=textureLod(obstacle_map,uv,0).rgb;
     float guide=1.0-smoothstep(0.0,max(cell*2.0,0.25),obstacle.r);
     result-=obstacle.gb*min(dot(result,obstacle.gb),0.0)*guide;
     return result;
 }
 void main() {
-    ivec2 id=ivec2(gl_GlobalInvocationID.xy),size=imageSize(shock_velocity);
-    if(any(greaterThanEqual(id,size))) { return; }
+    ivec2 local_id=ivec2(gl_GlobalInvocationID.xy);
+    if(any(greaterThanEqual(local_id,active_bounds.extent))) { return; }
+    ivec2 id=active_bounds.origin+local_id, size=imageSize(shock_velocity);
     vec2 h=1.0/vec2(size),uv=(vec2(id)+0.5)*h;
-    vec2 p=(uv-0.5)*params.region.xy+params.region.zw;
-    // 连续笔划只占场域很小一部分；区域外不进入含障碍追踪的动态循环。
-    if(any(lessThan(p,active_bounds.region.xy)) || any(greaterThan(p,active_bounds.region.zw))) {
-        imageStore(shock_velocity,id,vec4(0,0,velocity_at(uv)));
-        return;
-    }
     float cell=min(params.region.x*h.x,params.region.y*h.y);
     vec2 v=vec2(impulse_at(uv+vec2(h.x*0.5,0),cell).x,
                 impulse_at(uv+vec2(0,h.y*0.5),cell).y);
