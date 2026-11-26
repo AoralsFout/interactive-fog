@@ -12,7 +12,6 @@ const Effect = preload("res://fog/thin_fog_effect.gd")
 var effect: Effect
 var compositor: Compositor
 var previous_compositor: Compositor
-var previous_volume_enabled := true
 
 
 func _ready() -> void:
@@ -32,12 +31,9 @@ func _switch(active: bool) -> void:
 		var effects := compositor.compositor_effects
 		effects.append(effect)
 		compositor.compositor_effects = effects
-		previous_volume_enabled = world.environment.volumetric_fog_enabled
-		world.environment.volumetric_fog_enabled = false
 		camera.compositor = compositor
 	else:
 		camera.compositor = previous_compositor
-		world.environment.volumetric_fog_enabled = previous_volume_enabled
 		compositor = null
 	set_process(active)
 

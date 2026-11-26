@@ -6,6 +6,7 @@ extends Node3D
 ## 场景节点均由 .tscn 提供；本脚本只创建瞬态 GPU 资源和运行时材质副本。
 
 signal textures_changed
+signal appearance_changed
 signal settings_replaced
 
 @export var settings: FogSettings:
@@ -290,6 +291,11 @@ func _apply_appearance() -> void:
 	var volume_height := settings.get_volume_height()
 	_volume.position = Vector3(0.0, volume_height * 0.5, 0.0)
 	_volume.size = Vector3(settings.area_size.x, volume_height, settings.area_size.y)
+	apply_render_parameters(_render_material)
+	appearance_changed.emit()
+
+
+func apply_render_parameters(material: ShaderMaterial) -> void:
 	var values := {
 		"area_size": settings.area_size, "world_origin": global_position,
 		"thickness": settings.thickness, "density": settings.density,
@@ -301,7 +307,7 @@ func _apply_appearance() -> void:
 		"detail_sharpness": settings.detail_sharpness, "detail_warp": settings.detail_warp,
 	}
 	for key in values:
-		_render_material.set_shader_parameter(key, values[key])
+		material.set_shader_parameter(key, values[key])
 
 
 func _on_settings_changed() -> void:

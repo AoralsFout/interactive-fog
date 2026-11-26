@@ -61,18 +61,37 @@ enum BrushMode { STIR, PART }
 var _painting := false
 var _valid_brush := false
 var _cursor_material: StandardMaterial3D
+var _custom_fog_active := false
+var _previous_native_fog := true
+@onready var _environment: Environment = $WorldEnvironment.environment
 
 
 func _ready() -> void:
 	_cursor_material = _brush_ring.material_override.duplicate() as StandardMaterial3D
 	_brush_ring.material_override = _cursor_material
 	_hud.brush_mode_selected.connect(set_brush_mode)
+	_hud.fog_quality_selected.connect(_set_fog_renderer)
 	brush_mode_changed.connect(_hud.set_brush_mode)
 	_sync_brush_mode()
 
 
 func set_brush_mode(mode: int) -> void:
 	brush_mode = mode
+
+
+func _set_fog_renderer(index: int) -> void:
+	var custom := index in [FogDemoHUD.FogQuality.THIN_LAYER, FogDemoHUD.FogQuality.HORIZONTAL_SLICES]
+	if custom != _custom_fog_active:
+		if custom:
+			_previous_native_fog = _environment.volumetric_fog_enabled
+		_environment.volumetric_fog_enabled = false if custom else _previous_native_fog
+		_custom_fog_active = custom
+	_field.get_node("HorizontalSlices").set_active(index == FogDemoHUD.FogQuality.HORIZONTAL_SLICES)
+
+
+func _exit_tree() -> void:
+	if _custom_fog_active:
+		_environment.volumetric_fog_enabled = _previous_native_fog
 
 
 func _sync_brush_mode() -> void:

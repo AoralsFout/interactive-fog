@@ -1,8 +1,8 @@
 extends SceneTree
 ## GPU benchmark and paired captures. Run each mode in a fresh process.
-## -- --mode=high|performance|thin [--run=1] [--capture] [--clip]
+## -- --mode=high|performance|thin|slices [--layers=6] [--run=1] [--slice-comparison] [--capture] [--clip]
 const OUTPUT := "res://artifacts/thin-fog/"
-const MODES := ["high", "performance", "thin"]
+const MODES := ["high", "performance", "thin", "slices"]
 const KEYFRAMES := {96: "part", 164: "wave", 268: "wake"}
 const STEP := 1.0 / 30.0
 
@@ -15,19 +15,27 @@ func _run() -> void:
 	var mode := "high"
 	var run_id := 1
 	var capture := false
+	var layers := 6
 	var clip := false
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--mode="): mode = arg.trim_prefix("--mode=")
 		if arg.begins_with("--run="): run_id = arg.trim_prefix("--run=").to_int()
+		if arg.begins_with("--layers="): layers = arg.trim_prefix("--layers=").to_int()
 		if arg == "--capture": capture = true
 		if arg == "--clip":
 			clip = true
 			capture = true
-	if mode not in MODES or DisplayServer.get_name() == "headless":
+	if mode not in MODES or layers < 1 or layers > 12 or DisplayServer.get_name() == "headless":
 		quit(1)
 		return
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUTPUT))
-	var clip_path := "res://.godot/thin-clips/" + mode + "/"
+	var output := OUTPUT
+	if mode == "slices" or "--slice-comparison" in OS.get_cmdline_user_args():
+		output = "res://artifacts/horizontal-slices/"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(output))
+	var label := mode
+	if mode == "slices" and layers != 6:
+		label += "-%dlayers" % layers
+	var clip_path := "res://.godot/thin-clips/" + label + "/"
 	if clip:
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(clip_path))
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
@@ -51,6 +59,8 @@ func _run() -> void:
 	hud.hide()
 	brush.hide()
 	field.simulation_enabled = false
+	if mode == "slices":
+		field.get_node("HorizontalSlices").slice_count = layers
 	hud.set_fog_quality(MODES.find(mode))
 	RenderingServer.viewport_set_measure_render_time(vp.get_viewport_rid(), true)
 	# Wait for the asynchronous 3D noise bake before starting the fixed replay.
@@ -95,7 +105,7 @@ func _run() -> void:
 				return
 		if capture and KEYFRAMES.has(frame):
 			var tag := str(KEYFRAMES[frame])
-			if vp.get_texture().get_image().save_png(OUTPUT+mode+"-"+tag+".png") != OK:
+			if vp.get_texture().get_image().save_png(output+label+"-"+tag+".png") != OK:
 				quit(1)
 				return
 			hashes[tag] = _state_hash(field)
@@ -109,17 +119,20 @@ func _run() -> void:
 	if not capture:
 		report["wall_ms"] = _stats(wall)
 		report["viewport_gpu_ms"] = _stats(gpu)
-	var key := "%s-%s" % [mode,"capture" if capture else str(run_id)]
-	var file := FileAccess.open(OUTPUT+key+".json",FileAccess.WRITE)
+	if mode == "slices":
+		report["slice_count"] = layers
+	var key := "%s-%s" % [label,"capture" if capture else str(run_id)]
+	var file := FileAccess.open(output+key+".json",FileAccess.WRITE)
 	file.store_string(JSON.stringify(report,"\t")+"\n")
 	file.close()
 	# Exercise live switching on a frozen field, including restoration.
 	var end_hash := str(report.end_state_sha256)
-	for index in [2,1,0]:
+	for index in [3,2,3,1,0]:
 		hud.set_fog_quality(index)
 		await process_frame
 		await RenderingServer.frame_post_draw
-		if env.volumetric_fog_enabled != (index != 2) or _state_hash(field) != end_hash:
+		var slices: MultiMeshInstance3D = field.get_node("HorizontalSlices")
+		if env.volumetric_fog_enabled != (index < 2) or slices.visible != (index == 3) or _state_hash(field) != end_hash:
 			push_error("Switch changed the frozen field or left the wrong renderer active")
 			quit(1)
 			return

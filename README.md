@@ -59,7 +59,26 @@ flowchart TD
 
 默认半径 0.65 m、峰值速度 3 m/s、作用时间 0.3 s，主场景根节点可调整。最多保留 16 段轨迹，重叠路径取局部最强作用，避免移动缓慢时累加出过大速度。冲击速度与密度搬运都只派发到组内矩形。偶数子步直接写回当前状态，奇数子步只回拷本组矩形。
 
-面板的 **Fog quality** 有三档。High（默认 288 / 192）和 Performance（224 / 128）使用 Godot 的体积雾网格。选择 **Fog: 2.5D thin layer** 会关闭演示环境的体积雾，改用相机上的薄层合成效果。三档共享实时流体纹理，暂停时也可切换并比较同一片雾。
+面板的 **Fog quality** 有四档。High（默认 288 / 192）和 Performance（224 / 128）使用 Godot 的体积雾网格。**Fog: 2.5D thin layer** 使用相机上的薄层合成效果。**Fog: horizontal slices** 用透明水平面逐层绘制。两种自定义渲染器都会关闭演示环境的原生体积雾。四档共享实时流体纹理，暂停时也可切换并比较同一片雾。
+
+### 水平切片原型
+
+在主场景的 `FogField/HorizontalSlices` 可调整 `Slice Count`（1–12，默认 6）。一个 MultiMesh 绘制沿高度排列的平面，靠近地面的层更密。每层与 FogVolume 共用同一消光函数，根据层厚和视线角度计算透明度，接受场景灯光和阴影贴图。这个方法按全分辨率叠画透明像素，低角度或绕着柱脚看时，可以看见相邻平面之间的间隔。切片使用场景灯光的表面照明强度，原生体积雾专用的每灯能量倍率仅在 FogVolume 中由引擎自动应用。
+
+四档重新运行同一段 6 秒重放，条件为 Godot 4.7.2、D3D12 Forward+、RTX 3050 Ti Laptop、1080p 离屏视口、关闭垂直同步。每档四轮，每轮记录 312 帧，每档在轮次中的出场位置各用一次。表中为各轮统计量的中位数，单位 ms。旧版三档实验的独立数据列在下一节。
+
+| 渲染档 | 整帧中位 | 整帧 P95 | 整帧 P99 | 视口 GPU 中位 |
+|---|---:|---:|---:|---:|
+| FogVolume 高画质 | 10.54 | 24.91 | 25.79 | 9.18 |
+| FogVolume 性能档 | 5.87 | 19.20 | 20.72 | 4.45 |
+| 2.5D 薄层 | 4.17 | 11.56 | 17.45 | 1.73 |
+| 六层水平切片 | 4.93 | 18.20 | 20.33 | 3.46 |
+
+另做两轮三层和六层的交换次序测试。三层 / 六层的视口 GPU 中位耗时为 2.18 / 3.49 ms，整帧中位为 4.26 / 5.36 ms。三层的波前出现更宽的间隙。以上开销均包含场景，整帧 P95 是绘制完成信号之间的墙钟间隔。截图在单独进程中录制。
+
+[四档同步视频](artifacts/horizontal-slices/replay.mp4) · [四档同帧截图](artifacts/horizontal-slices/comparison.jpg) · [三层与六层的波前局部](artifacts/horizontal-slices/slice-count.jpg) · [原始数据](artifacts/horizontal-slices/)
+
+复测可运行 `godot --path . --audio-driver Dummy --rendering-driver d3d12 --script res://tests/thin_fog_replay.gd -- --mode=slices --layers=6 --run=1`。换用 `--layers=3` 即可测试三层，以 `--capture` 或 `--clip` 单独生成画面。测试其余三档时加 `--slice-comparison` 可将报告写入本轮目录。
 
 ### 2.5D 薄层原型对照
 

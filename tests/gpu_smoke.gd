@@ -117,7 +117,20 @@ func _run() -> void:
 	await _frames(4)
 	_check(_image_difference(thin_frame, root.get_texture().get_image()) > 0.002,
 		"thin renderer draws the field and responds to density while paused")
+	selector.item_selected.emit(3)
+	await _frames(4)
+	var slice_clear := root.get_texture().get_image()
 	_field.settings.density = original_density
+	await _frames(4)
+	_check(_image_difference(slice_clear, root.get_texture().get_image()) > 0.002,
+		"horizontal slices respond to optical density on a frozen field")
+	var camera := _demo.get_node("CameraRig/Camera3D") as Camera3D
+	var slices := _field.get_node("HorizontalSlices") as MultiMeshInstance3D
+	_check(camera.compositor == null and slices.visible and slices.multimesh.instance_count == 6,
+		"switching from thin fog draws only the six horizontal slices")
+	selector.item_selected.emit(2)
+	await _frames(2)
+	_check(not slices.visible and camera.compositor != null, "returning to thin fog hides the slice geometry")
 	selector.item_selected.emit(0)
 	await _frames(5)
 	_check(retained.get_image().get_data() == frozen and

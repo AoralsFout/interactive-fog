@@ -254,7 +254,7 @@ unique_name_in_owner = true
 layout_mode = 2
 focus_mode = 0
 tooltip_text = "Fog rendering method and quality"
-item_count = 3
+item_count = 4
 selected = 0
 popup/item_0/text = "Fog quality: High"
 popup/item_0/id = 0
@@ -262,6 +262,8 @@ popup/item_1/text = "Fog quality: Performance"
 popup/item_1/id = 1
 popup/item_2/text = "Fog: 2.5D thin layer"
 popup/item_2/id = 2
+popup/item_3/text = "Fog: horizontal slices"
+popup/item_3/id = 3
 
 [node name="StatusLabel" type="Label" parent="Layout/ControlsPanel/Content" unique_id=1287986045]
 unique_name_in_owner = true

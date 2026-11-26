@@ -11,6 +11,7 @@
 [ext_resource type="PackedScene" uid="uid://qoom3gyhd6xw" path="res://demo/hud.tscn" id="9_hud"]
 [ext_resource type="Script" uid="uid://ci0th8joh5ei6" path="res://fog/fog_settings.gd" id="9_kbqbn"]
 [ext_resource type="Script" path="res://demo/thin_fog_renderer.gd" id="10_thin"]
+[ext_resource type="Script" path="res://fog/horizontal_slices.gd" id="11_slices"]
 
 [sub_resource type="Environment" id="Environment_demo"]
 resource_local_to_scene = true
@@ -207,6 +208,11 @@ swirl_strength = 2.0
 
 [node name="FogField" parent="." unique_id=1853580114 instance=ExtResource("2_fog")]
 settings = SubResource("Resource_kbqbn")
+
+[node name="HorizontalSlices" type="MultiMeshInstance3D" parent="FogField"]
+visible = false
+cast_shadow = 0
+script = ExtResource("11_slices")
 
 [node name="HUD" parent="." unique_id=842371717 instance=ExtResource("9_hud")]
 
