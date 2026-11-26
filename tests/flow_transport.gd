@@ -3,6 +3,7 @@ extends SceneTree
 
 const STEP := 1.0 / 30.0
 const OUTPUT := "res://artifacts/flow-transport/"
+var _output := OUTPUT
 var _field: InteractiveFogField
 var _failures := 0
 
@@ -15,7 +16,10 @@ func _run() -> void:
 	if DisplayServer.get_name() == "headless":
 		quit(1)
 		return
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUTPUT))
+	var use_multigrid := "--multigrid" in OS.get_cmdline_user_args()
+	if use_multigrid:
+		_output = "res://.godot/multigrid-transport/"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_output))
 	_field = load("res://fog/scenes/fog_field.tscn").instantiate() as InteractiveFogField
 	_field.settings = FogSettings.new()
 	_field.settings.resolution = 256
@@ -25,6 +29,8 @@ func _run() -> void:
 	_field.settings.velocity_damping = 0.0
 	_field.settings.vorticity_strength = 0.0
 	_field.settings.pressure_iterations = 64
+	if use_multigrid:
+		_field.settings.pressure_solver = FogSettings.PressureSolver.MULTIGRID
 	_field.settings.detail_reset_period = 4.0
 	_field.simulation_enabled = false
 	root.add_child(_field)
@@ -215,7 +221,7 @@ func _save_density(state: Image, name: String) -> void:
 		for x in range(state.get_width()):
 			var d := state.get_pixel(x, y).r
 			image.set_pixel(x, y, Color(d * 0.65, d * 0.9, d))
-	image.save_png(OUTPUT + name + ".png")
+	image.save_png(_output + name + ".png")
 
 
 func _check(condition: bool, message: String) -> void:

@@ -18,6 +18,11 @@ const SHADERS := {
 	"divergence": preload("res://fog/shaders/divergence.glsl"),
 	"topology": preload("res://fog/shaders/pressure_topology.glsl"),
 	"pressure": preload("res://fog/shaders/pressure.glsl"),
+	"mg_finest": preload("res://fog/shaders/mg_finest.glsl"),
+	"mg_coarsen": preload("res://fog/shaders/mg_coarsen.glsl"),
+	"mg_smooth": preload("res://fog/shaders/mg_smooth.glsl"),
+	"mg_restrict": preload("res://fog/shaders/mg_restrict.glsl"),
+	"mg_prolong": preload("res://fog/shaders/mg_prolong.glsl"),
 	"project": preload("res://fog/shaders/project_velocity.glsl"),
 	"predict": preload("res://fog/shaders/density_predict.glsl"),
 	"transport": preload("res://fog/shaders/simulate.glsl"),
@@ -32,6 +37,17 @@ class ShockRegion:
 	var members: int
 	var burst_speed := 0.0
 	var cut_speed := 0.0
+
+
+class PressureLevel:
+	var size: int
+	var faces: RID
+	var rhs: RID
+	var pressure: Array[RID]
+	var geometry_set: RID
+	var smooth: Array[RID]
+	var restrict_sets: Array[RID]
+	var prolong: Array[RID]
 
 
 var state_texture := Texture2DRD.new()
@@ -66,6 +82,9 @@ var _backtrace_uv := RID()
 var _read := 0
 var _pressure_read := 0
 var _pressure_sets: Array[RID] = []
+var _topology: RID
+var _levels: Array[PressureLevel] = []
+var _mg_geometry_dirty := true
 var _ready_on_gpu := false
 
 
@@ -74,9 +93,10 @@ func start(resolution: int, density_resolution: int) -> void:
 
 
 func advance(parameters: PackedFloat32Array, stamps: PackedFloat32Array,
-		obstacles: PackedFloat32Array, rebuild: bool, iterations: int, shocks: PackedFloat32Array) -> void:
+		obstacles: PackedFloat32Array, rebuild: bool, iterations: int, shocks: PackedFloat32Array,
+		multigrid_cycles := 0) -> void:
 	RenderingServer.call_on_render_thread(_advance.bind(
-		parameters.to_byte_array(), stamps.to_byte_array(), obstacles.to_byte_array() if rebuild else PackedByteArray(), rebuild, iterations, shocks.to_byte_array()))
+		parameters.to_byte_array(), stamps.to_byte_array(), obstacles.to_byte_array() if rebuild else PackedByteArray(), rebuild, iterations, shocks.to_byte_array(), multigrid_cycles))
 
 
 func shutdown() -> void:
@@ -174,9 +194,9 @@ func _initialize(resolution: int, density_resolution: int) -> void:
 		_coordinates.append(_texture(_density_resolution, RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT))
 		_pressures.append(_texture(_resolution, RenderingDevice.DATA_FORMAT_R32_SFLOAT))
 
-	var topology := _texture(_resolution, RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT)
+	_topology = _texture(_resolution, RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT)
 	var topology_uniforms := _common(_velocity)
-	topology_uniforms.append(_image(3, topology))
+	topology_uniforms.append(_image(3, _topology))
 	_sets["topology"] = _make_set("topology", topology_uniforms)
 	_sets["obstacles"] = _make_set("obstacles", [_image(0, _mask), _buffer(1, _parameters), _buffer(2, _obstacles)])
 	var uniforms := _common(_velocity)
@@ -192,7 +212,7 @@ func _initialize(resolution: int, density_resolution: int) -> void:
 	uniforms.append_array([_buffer(3, _shocks), _image(4, _shock_velocity)])
 	_sets["shock_field"] = _make_set("shock_field", uniforms)
 	for index in range(2):
-		_pressure_sets.append(_make_set("pressure", [_sample(0, topology), _sample(1, _before_projection),
+		_pressure_sets.append(_make_set("pressure", [_sample(0, _topology), _sample(1, _before_projection),
 			_sample(2, _pressures[index]), _image(3, _pressures[1 - index])]))
 		uniforms = _common(_working_velocity)
 		uniforms.append_array([_sample(3, _pressures[index]), _image(4, _velocity)])
@@ -238,8 +258,60 @@ func _dispatch(list: int, stage: String, uniform_set: RID, size: int, push := Pa
 	_rd.compute_list_add_barrier(list)
 
 
+func _init_multigrid() -> void:
+	var size := _resolution
+	var fine: PressureLevel
+	while true:
+		var level := PressureLevel.new()
+		level.size = size
+		level.faces = _texture(size, RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT)
+		if fine == null:
+			level.pressure = _pressures
+			level.rhs = _before_projection
+			level.geometry_set = _make_set("mg_finest", [_sample(0,_topology), _image(1,level.faces), _sample(2,_mask)])
+		else:
+			level.rhs = _texture(size, RenderingDevice.DATA_FORMAT_R32_SFLOAT)
+			for i in 2:
+				level.pressure.append(_texture(size, RenderingDevice.DATA_FORMAT_R32_SFLOAT))
+			level.geometry_set = _make_set("mg_coarsen", [_sample(0,fine.faces), _image(1,level.faces)])
+			for i in 2:
+				fine.restrict_sets.append(_make_set("mg_restrict", [_sample(0,fine.faces), _sample(1,fine.rhs),
+					_sample(2,fine.pressure[i]), _image(3,level.rhs), _image(4,level.pressure[0])]))
+				for coarse_read in 2:
+					fine.prolong.append(_make_set("mg_prolong", [_sample(0,fine.faces), _sample(1,level.faces),
+						_sample(2,level.pressure[coarse_read]), _sample(3,fine.pressure[i]), _image(4,fine.pressure[1-i])]))
+		for i in 2:
+			level.smooth.append(_make_set("mg_smooth", [_sample(0,level.faces), _sample(1,level.rhs),
+				_sample(2,level.pressure[i]), _image(3,level.pressure[1-i])]))
+		_levels.append(level)
+		if size <= 8:
+			break
+		fine = level
+		size = (size+1)/2
+
+
+func _smooth(list: int, level: PressureLevel, read: int, iterations: int) -> int:
+	for i in iterations:
+		_dispatch(list, "mg_smooth", level.smooth[read], level.size)
+		read = 1-read
+	return read
+
+
+func _v_cycle(list: int, depth: int, read: int) -> int:
+	var level := _levels[depth]
+	if depth+1 == _levels.size():
+		return _smooth(list, level, read, 16)
+	read = _smooth(list, level, read, 2)
+	_dispatch(list, "mg_restrict", level.restrict_sets[read], _levels[depth+1].size)
+	var coarse_read := _v_cycle(list, depth+1, 0)
+	_dispatch(list, "mg_prolong", level.prolong[2*read+coarse_read], level.size)
+	# Smooth fine-scale jumps left by the masked interpolation at solid faces.
+	return _smooth(list, level, 1-read, 4)
+
+
 func _advance(parameters: PackedByteArray, stamps: PackedByteArray,
-		obstacles: PackedByteArray, rebuild: bool, iterations: int, shocks: PackedByteArray) -> void:
+		obstacles: PackedByteArray, rebuild: bool, iterations: int, shocks: PackedByteArray,
+		multigrid_cycles := 0) -> void:
 	if not _ready_on_gpu:
 		return
 	var dt := parameters.decode_float(32)
@@ -255,19 +327,31 @@ func _advance(parameters: PackedByteArray, stamps: PackedByteArray,
 			_rd.texture_clear(pressure, Color(0, 0, 0, 0), 0, 1, 0, 1)
 		for diagnostic in [_before_projection, _after_projection]:
 			_rd.texture_clear(diagnostic, Color(0, 0, 0, 0), 0, 1, 0, 1)
+	if multigrid_cycles > 0 and _levels.is_empty():
+		_init_multigrid()
 	var list := _rd.compute_list_begin()
 	if rebuild:
 		_dispatch(list, "obstacles", _sets["obstacles"], _density_resolution)
 		_dispatch(list, "topology", _sets["topology"], _resolution)
+		_mg_geometry_dirty = true
 	_dispatch(list, "velocity", _sets["velocity"], _resolution)
 	_dispatch(list, "divergence", _sets["divergence"], _resolution)
-	var groups := ceili(_resolution / 8.0)
-	_rd.compute_list_bind_compute_pipeline(list, _pipelines["pressure"])
-	for index in range(iterations):
-		_rd.compute_list_bind_uniform_set(list, _pressure_sets[_pressure_read], 0)
-		_rd.compute_list_dispatch(list, groups, groups, 1)
-		_rd.compute_list_add_barrier(list)
-		_pressure_read = 1 - _pressure_read
+	if multigrid_cycles > 0:
+		if _mg_geometry_dirty:
+			for i in _levels.size():
+				var level := _levels[i]
+				_dispatch(list, "mg_finest" if i == 0 else "mg_coarsen", level.geometry_set, level.size)
+			_mg_geometry_dirty = false
+		for cycle in multigrid_cycles:
+			_pressure_read = _v_cycle(list, 0, _pressure_read)
+	else:
+		var groups := ceili(_resolution / 8.0)
+		_rd.compute_list_bind_compute_pipeline(list, _pipelines["pressure"])
+		for index in range(iterations):
+			_rd.compute_list_bind_uniform_set(list, _pressure_sets[_pressure_read], 0)
+			_rd.compute_list_dispatch(list, groups, groups, 1)
+			_rd.compute_list_add_barrier(list)
+			_pressure_read = 1 - _pressure_read
 	_dispatch(list, "project", _sets["project%d" % _pressure_read], _resolution)
 	_dispatch(list, "divergence", _sets["diagnostics"], _resolution)
 	_dispatch(list, "predict", _sets["predict%d" % _read], _density_resolution)
@@ -363,6 +447,8 @@ func _release() -> void:
 	_coordinates.clear()
 	_pressures.clear()
 	_pressure_sets.clear()
+	_levels.clear()
+	_mg_geometry_dirty = true
 	_sets.clear()
 	_shaders.clear()
 	_pipelines.clear()

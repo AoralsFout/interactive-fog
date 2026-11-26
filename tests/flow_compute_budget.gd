@@ -23,6 +23,14 @@ func _run() -> void:
 	demo.get_node("Player").set_physics_process(false)
 	(demo.get_node("WorldEnvironment") as WorldEnvironment).environment.volumetric_fog_enabled = false
 	var field := demo.get_node("FogField") as InteractiveFogField
+	if "--multigrid" in OS.get_cmdline_user_args():
+		field.settings.pressure_solver = FogSettings.PressureSolver.MULTIGRID
+	else:
+		field.settings.pressure_solver = FogSettings.PressureSolver.JACOBI
+	field.settings.pressure_iterations = 64
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--cycles="):
+			field.settings.multigrid_cycles = arg.trim_prefix("--cycles=").to_int()
 	field.simulation_enabled = false
 	await process_frame
 	await RenderingServer.frame_post_draw

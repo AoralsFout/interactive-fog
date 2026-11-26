@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://btubihj1u1nnf"
+path="res://.godot/imported/mg_coarsen.glsl-2ce6604598c0f4542f6051d951c98bc3.res"
+
+[deps]
+
+source_file="res://fog/shaders/mg_coarsen.glsl"
+dest_files=["res://.godot/imported/mg_coarsen.glsl-2ce6604598c0f4542f6051d951c98bc3.res"]
+
+[params]
+

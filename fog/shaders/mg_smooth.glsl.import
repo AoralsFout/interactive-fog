@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://b4hi88u41vwuk"
+path="res://.godot/imported/mg_smooth.glsl-71af998400b14e7c8d28887a0a01a5da.res"
+
+[deps]
+
+source_file="res://fog/shaders/mg_smooth.glsl"
+dest_files=["res://.godot/imported/mg_smooth.glsl-71af998400b14e7c8d28887a0a01a5da.res"]
+
+[params]
+

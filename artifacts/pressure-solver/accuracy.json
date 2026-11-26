@@ -1,0 +1,326 @@
+{
+  "256": {
+    "cold": {
+      "jacobi": {
+        "relative_l2_residual": 0.2610141309723067,
+        "reference_relative_l2": 3.3214049379841557e-14,
+        "near_residual_rms": 1.1226602187510053,
+        "near_velocity_rmse_mps": 0.7177016866965422,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.17815424895242113,
+        "gap_flux_m2ps": 0.9819793701171875,
+        "reference_gap_flux_m2ps": 2.2928742967477014
+      },
+      "multigrid": {
+        "relative_l2_residual": 0.2292212795722052,
+        "reference_relative_l2": 3.3214049379841557e-14,
+        "near_residual_rms": 1.0576066870857732,
+        "near_velocity_rmse_mps": 0.6100081116459838,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.15658527782976397,
+        "gap_flux_m2ps": 1.1834716796875,
+        "reference_gap_flux_m2ps": 2.2928742967477014
+      },
+      "multigrid-3": {
+        "relative_l2_residual": 0.16404277211554766,
+        "reference_relative_l2": 3.3214049379841557e-14,
+        "near_residual_rms": 0.7398528394466225,
+        "near_velocity_rmse_mps": 0.49757050453812013,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.11220158504417747,
+        "gap_flux_m2ps": 1.3455963134765625,
+        "reference_gap_flux_m2ps": 2.2928742967477014
+      }
+    },
+    "matched": {
+      "jacobi": {
+        "relative_l2_residual": 0.2930504746652111,
+        "reference_relative_l2": 3.806418980893036e-14,
+        "near_residual_rms": 0.26611472210433973,
+        "near_velocity_rmse_mps": 0.08750786970337548,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.06740384685033772,
+        "gap_flux_m2ps": 0.8876419067382812,
+        "reference_gap_flux_m2ps": 0.9668001701909676
+      },
+      "multigrid": {
+        "relative_l2_residual": 0.22812981208350108,
+        "reference_relative_l2": 3.806418980893036e-14,
+        "near_residual_rms": 0.22306875878817467,
+        "near_velocity_rmse_mps": 0.07214657002199364,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.061610632320701755,
+        "gap_flux_m2ps": 0.9014129638671875,
+        "reference_gap_flux_m2ps": 0.9668001701909676
+      },
+      "multigrid-3": {
+        "relative_l2_residual": 0.14419372761395163,
+        "reference_relative_l2": 3.806418980893036e-14,
+        "near_residual_rms": 0.13656130119151183,
+        "near_velocity_rmse_mps": 0.05052791219019666,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.05367725176281323,
+        "gap_flux_m2ps": 0.9081268310546875,
+        "reference_gap_flux_m2ps": 0.9668001701909676
+      }
+    },
+    "wake": {
+      "jacobi": {
+        "relative_l2_residual": 0.1041742711739134,
+        "reference_relative_l2": 2.417999755738618e-14,
+        "near_residual_rms": 0.03338821468311014,
+        "near_velocity_rmse_mps": 0.03395449987134029,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.06348019707059707,
+        "gap_flux_m2ps": 1.0609817504882812,
+        "reference_gap_flux_m2ps": 1.0353282453422499
+      },
+      "multigrid": {
+        "relative_l2_residual": 0.02997014087821696,
+        "reference_relative_l2": 1.2592510714882447e-14,
+        "near_residual_rms": 0.01789976935751427,
+        "near_velocity_rmse_mps": 0.00940063607880745,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.05806495748302825,
+        "gap_flux_m2ps": 1.0393142700195312,
+        "reference_gap_flux_m2ps": 1.031362259694058
+      },
+      "multigrid-3": {
+        "relative_l2_residual": 0.011247945530768503,
+        "reference_relative_l2": 1.126083870829438e-14,
+        "near_residual_rms": 0.006496658729958133,
+        "near_velocity_rmse_mps": 0.0038850638477743384,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.05924677275024357,
+        "gap_flux_m2ps": 1.0347366333007812,
+        "reference_gap_flux_m2ps": 1.0310521623448046
+      }
+    },
+    "moved": {
+      "jacobi": {
+        "relative_l2_residual": 0.1429938858756313,
+        "reference_relative_l2": 2.6551096347351836e-14,
+        "near_residual_rms": 0.07406786321289037,
+        "near_velocity_rmse_mps": 0.05326674381735692,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.07754688185163258,
+        "gap_flux_m2ps": 0.9148788452148438,
+        "reference_gap_flux_m2ps": 0.8775939742348529
+      },
+      "multigrid": {
+        "relative_l2_residual": 0.05035724651438275,
+        "reference_relative_l2": 1.3103296503970454e-14,
+        "near_residual_rms": 0.02644338592503016,
+        "near_velocity_rmse_mps": 0.019062891668748215,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.061109041313489695,
+        "gap_flux_m2ps": 0.8752059936523438,
+        "reference_gap_flux_m2ps": 0.8720723515093615
+      },
+      "multigrid-3": {
+        "relative_l2_residual": 0.01862966322521917,
+        "reference_relative_l2": 1.3432305194885757e-14,
+        "near_residual_rms": 0.008977950391340632,
+        "near_velocity_rmse_mps": 0.010140440184216375,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.06010539931434747,
+        "gap_flux_m2ps": 0.8691787719726562,
+        "reference_gap_flux_m2ps": 0.8714195144165524
+      }
+    },
+    "sealed": {
+      "jacobi": {
+        "relative_l2_residual": 0.38526094558535584,
+        "reference_relative_l2": 2.4697868272305104e-14,
+        "near_residual_rms": 0.024190258226717384,
+        "near_velocity_rmse_mps": 0.03518496277559582,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.04844137402268348,
+        "unforced_side_max_mps": 0.0,
+        "unforced_side_max_pressure": 0.0
+      },
+      "multigrid": {
+        "relative_l2_residual": 0.32325070298072456,
+        "reference_relative_l2": 2.4697868272305104e-14,
+        "near_residual_rms": 0.01204845944923581,
+        "near_velocity_rmse_mps": 0.02253601075255503,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.040665676525566664,
+        "unforced_side_max_mps": 0.0,
+        "unforced_side_max_pressure": 0.0
+      },
+      "multigrid-3": {
+        "relative_l2_residual": 0.19764909327033944,
+        "reference_relative_l2": 2.4697868272305104e-14,
+        "near_residual_rms": 0.01367244630748682,
+        "near_velocity_rmse_mps": 0.01761513687772884,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.02488816798164095,
+        "unforced_side_max_mps": 0.0,
+        "unforced_side_max_pressure": 0.0
+      }
+    }
+  },
+  "65": {
+    "cold": {
+      "jacobi": {
+        "relative_l2_residual": 0.06647526326741945,
+        "reference_relative_l2": 2.1734399132770766e-15,
+        "near_residual_rms": 0.0405352689301767,
+        "near_velocity_rmse_mps": 0.06364822979957925,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.015524543721732694,
+        "gap_flux_m2ps": 0.35877403846153844,
+        "reference_gap_flux_m2ps": 0.350591079173452
+      },
+      "multigrid": {
+        "relative_l2_residual": 0.09427088372609298,
+        "reference_relative_l2": 2.1734399132770766e-15,
+        "near_residual_rms": 0.10234197563752462,
+        "near_velocity_rmse_mps": 0.08323880937264289,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.02206487139904498,
+        "gap_flux_m2ps": 0.3590745192307692,
+        "reference_gap_flux_m2ps": 0.350591079173452
+      },
+      "multigrid-3": {
+        "relative_l2_residual": 0.046908797394291726,
+        "reference_relative_l2": 2.1734399132770766e-15,
+        "near_residual_rms": 0.04468013239226084,
+        "near_velocity_rmse_mps": 0.04792059567262699,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.01120184085046554,
+        "gap_flux_m2ps": 0.3557692307692308,
+        "reference_gap_flux_m2ps": 0.350591079173452
+      }
+    },
+    "matched": {
+      "jacobi": {
+        "relative_l2_residual": 0.04004526083379429,
+        "reference_relative_l2": 1.4515697817316746e-15,
+        "near_residual_rms": 0.008934144537090285,
+        "near_velocity_rmse_mps": 0.009886626205514388,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.010449360425205088,
+        "gap_flux_m2ps": 0.2922175480769231,
+        "reference_gap_flux_m2ps": 0.29449629288646206
+      },
+      "multigrid": {
+        "relative_l2_residual": 0.068559078635634,
+        "reference_relative_l2": 1.4515697817316746e-15,
+        "near_residual_rms": 0.029622883961727336,
+        "near_velocity_rmse_mps": 0.00726114869903642,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.011578332737245315,
+        "gap_flux_m2ps": 0.2932692307692308,
+        "reference_gap_flux_m2ps": 0.29449629288646206
+      },
+      "multigrid-3": {
+        "relative_l2_residual": 0.027124810655701558,
+        "reference_relative_l2": 1.4515697817316746e-15,
+        "near_residual_rms": 0.010195507166003339,
+        "near_velocity_rmse_mps": 0.003587584065876906,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.008963842570878646,
+        "gap_flux_m2ps": 0.2937199519230769,
+        "reference_gap_flux_m2ps": 0.29449629288646206
+      }
+    },
+    "wake": {
+      "jacobi": {
+        "relative_l2_residual": 0.07418870220169611,
+        "reference_relative_l2": 3.2796125739801267e-15,
+        "near_residual_rms": 0.003493847519475249,
+        "near_velocity_rmse_mps": 0.0028858001087071522,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.008867335208431575,
+        "gap_flux_m2ps": 0.24744591346153846,
+        "reference_gap_flux_m2ps": 0.2475788937294847
+      },
+      "multigrid": {
+        "relative_l2_residual": 0.010473621091227006,
+        "reference_relative_l2": 1.7697880560406859e-15,
+        "near_residual_rms": 0.0005119297742862941,
+        "near_velocity_rmse_mps": 0.0011570143220724519,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.00982489315938613,
+        "gap_flux_m2ps": 0.24669471153846154,
+        "reference_gap_flux_m2ps": 0.24688232164412638
+      },
+      "multigrid-3": {
+        "relative_l2_residual": 0.0032320798917373364,
+        "reference_relative_l2": 1.6798353486105717e-15,
+        "near_residual_rms": 0.0001940217906119888,
+        "near_velocity_rmse_mps": 0.0005381289797739501,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.009785635268059237,
+        "gap_flux_m2ps": 0.24714543269230768,
+        "reference_gap_flux_m2ps": 0.24729686295332529
+      }
+    },
+    "moved": {
+      "jacobi": {
+        "relative_l2_residual": 0.06601503494283537,
+        "reference_relative_l2": 3.1086826899937658e-15,
+        "near_residual_rms": 0.002693389373274035,
+        "near_velocity_rmse_mps": 0.005446962613756558,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.008809110047752533,
+        "gap_flux_m2ps": 0.23677884615384615,
+        "reference_gap_flux_m2ps": 0.2355435931390207
+      },
+      "multigrid": {
+        "relative_l2_residual": 0.020878195972590174,
+        "reference_relative_l2": 3.0170090828786014e-15,
+        "near_residual_rms": 0.0013010147708559965,
+        "near_velocity_rmse_mps": 0.0019858348392113707,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.009376849018901592,
+        "gap_flux_m2ps": 0.23512620192307693,
+        "reference_gap_flux_m2ps": 0.23506023804311668
+      },
+      "multigrid-3": {
+        "relative_l2_residual": 0.005702647518464784,
+        "reference_relative_l2": 2.306833291526072e-15,
+        "near_residual_rms": 0.00036244692108949644,
+        "near_velocity_rmse_mps": 0.0006678925585793818,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.009587345363523125,
+        "gap_flux_m2ps": 0.23557692307692307,
+        "reference_gap_flux_m2ps": 0.23565551128894183
+      }
+    },
+    "sealed": {
+      "jacobi": {
+        "relative_l2_residual": 0.0426469977066825,
+        "reference_relative_l2": 1.8336194801183395e-15,
+        "near_residual_rms": 0.01244651771842758,
+        "near_velocity_rmse_mps": 0.008832198381542424,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.0050915499360775366,
+        "unforced_side_max_mps": 0.0,
+        "unforced_side_max_pressure": 0.0
+      },
+      "multigrid": {
+        "relative_l2_residual": 0.06930484628021083,
+        "reference_relative_l2": 1.8336194801183395e-15,
+        "near_residual_rms": 0.013363982355299663,
+        "near_velocity_rmse_mps": 0.009462868339147728,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.008293496051811153,
+        "unforced_side_max_mps": 0.0,
+        "unforced_side_max_pressure": 0.0
+      },
+      "multigrid-3": {
+        "relative_l2_residual": 0.029600467938620874,
+        "reference_relative_l2": 1.8336194801183395e-15,
+        "near_residual_rms": 0.007344851891669174,
+        "near_velocity_rmse_mps": 0.004947700680048726,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.0035802518787939625,
+        "unforced_side_max_mps": 0.0,
+        "unforced_side_max_pressure": 0.0
+      }
+    }
+  }
+}

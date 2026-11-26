@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://c12q4ab15qsgi"
+path="res://.godot/imported/mg_restrict.glsl-70d09e72b48169754da24ba5121f203b.res"
+
+[deps]
+
+source_file="res://fog/shaders/mg_restrict.glsl"
+dest_files=["res://.godot/imported/mg_restrict.glsl-70d09e72b48169754da24ba5121f203b.res"]
+
+[params]
+

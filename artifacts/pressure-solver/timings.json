@@ -1,0 +1,245 @@
+{
+  "godot": "4.7.2 stable mono",
+  "driver": "D3D12 Forward+",
+  "adapter": "NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+  "velocity_resolution": 256,
+  "density_resolution": 512,
+  "warmup_per_case": 15,
+  "timed_steps_per_case": 90,
+  "scope": "GPU timestamps around complete simulation step; no render or diagnostic readback. Obstacle topology rebuild and initialization excluded by warmup.",
+  "median_of_run_statistics": {
+    "jacobi-64": {
+      "flow": {
+        "median_ms": 0.915456,
+        "p95_ms": 1.340416
+      },
+      "part": {
+        "median_ms": 0.965632,
+        "p95_ms": 1.043456
+      },
+      "four_bursts": {
+        "median_ms": 1.409024,
+        "p95_ms": 1.831936
+      }
+    },
+    "multigrid-2": {
+      "flow": {
+        "median_ms": 0.7936,
+        "p95_ms": 0.905216
+      },
+      "part": {
+        "median_ms": 0.830464,
+        "p95_ms": 0.959488
+      },
+      "four_bursts": {
+        "median_ms": 1.28512,
+        "p95_ms": 1.629184
+      }
+    },
+    "multigrid-3": {
+      "flow": {
+        "median_ms": 1.05984,
+        "p95_ms": 1.471488
+      },
+      "part": {
+        "median_ms": 1.026048,
+        "p95_ms": 1.425408
+      },
+      "four_bursts": {
+        "median_ms": 1.46432,
+        "p95_ms": 2.122752
+      }
+    }
+  },
+  "runs": [
+    {
+      "solver": "jacobi-64",
+      "run": 1,
+      "step": {
+        "flow": {
+          "median_ms": 0.915456,
+          "p95_ms": 1.077248,
+          "samples": 90
+        },
+        "four_bursts": {
+          "median_ms": 1.409024,
+          "p95_ms": 1.831936,
+          "samples": 90
+        },
+        "part": {
+          "median_ms": 0.971776,
+          "p95_ms": 1.043456,
+          "samples": 90
+        }
+      }
+    },
+    {
+      "solver": "multigrid-2",
+      "run": 2,
+      "step": {
+        "flow": {
+          "median_ms": 0.7936,
+          "p95_ms": 0.953344,
+          "samples": 90
+        },
+        "four_bursts": {
+          "median_ms": 1.294336,
+          "p95_ms": 1.61792,
+          "samples": 90
+        },
+        "part": {
+          "median_ms": 0.837632,
+          "p95_ms": 0.960512,
+          "samples": 90
+        }
+      }
+    },
+    {
+      "solver": "multigrid-3",
+      "run": 3,
+      "step": {
+        "flow": {
+          "median_ms": 0.994304,
+          "p95_ms": 1.471488,
+          "samples": 90
+        },
+        "four_bursts": {
+          "median_ms": 1.516544,
+          "p95_ms": 2.157568,
+          "samples": 90
+        },
+        "part": {
+          "median_ms": 1.047552,
+          "p95_ms": 1.425408,
+          "samples": 90
+        }
+      }
+    },
+    {
+      "solver": "multigrid-3",
+      "run": 4,
+      "step": {
+        "flow": {
+          "median_ms": 1.086464,
+          "p95_ms": 1.609728,
+          "samples": 90
+        },
+        "four_bursts": {
+          "median_ms": 1.46432,
+          "p95_ms": 2.048,
+          "samples": 90
+        },
+        "part": {
+          "median_ms": 1.026048,
+          "p95_ms": 1.427456,
+          "samples": 90
+        }
+      }
+    },
+    {
+      "solver": "multigrid-2",
+      "run": 5,
+      "step": {
+        "flow": {
+          "median_ms": 0.816128,
+          "p95_ms": 0.905216,
+          "samples": 90
+        },
+        "four_bursts": {
+          "median_ms": 1.270784,
+          "p95_ms": 1.629184,
+          "samples": 90
+        },
+        "part": {
+          "median_ms": 0.830464,
+          "p95_ms": 0.959488,
+          "samples": 90
+        }
+      }
+    },
+    {
+      "solver": "jacobi-64",
+      "run": 6,
+      "step": {
+        "flow": {
+          "median_ms": 1.053696,
+          "p95_ms": 1.363968,
+          "samples": 90
+        },
+        "four_bursts": {
+          "median_ms": 1.409024,
+          "p95_ms": 1.974272,
+          "samples": 90
+        },
+        "part": {
+          "median_ms": 0.965632,
+          "p95_ms": 1.21344,
+          "samples": 90
+        }
+      }
+    },
+    {
+      "solver": "multigrid-2",
+      "run": 7,
+      "step": {
+        "flow": {
+          "median_ms": 0.7424,
+          "p95_ms": 0.90112,
+          "samples": 90
+        },
+        "four_bursts": {
+          "median_ms": 1.28512,
+          "p95_ms": 1.719296,
+          "samples": 90
+        },
+        "part": {
+          "median_ms": 0.8192,
+          "p95_ms": 0.89088,
+          "samples": 90
+        }
+      }
+    },
+    {
+      "solver": "jacobi-64",
+      "run": 8,
+      "step": {
+        "flow": {
+          "median_ms": 0.882688,
+          "p95_ms": 1.340416,
+          "samples": 90
+        },
+        "four_bursts": {
+          "median_ms": 1.393664,
+          "p95_ms": 1.767424,
+          "samples": 90
+        },
+        "part": {
+          "median_ms": 0.961536,
+          "p95_ms": 1.035264,
+          "samples": 90
+        }
+      }
+    },
+    {
+      "solver": "multigrid-3",
+      "run": 9,
+      "step": {
+        "flow": {
+          "median_ms": 1.05984,
+          "p95_ms": 1.405952,
+          "samples": 90
+        },
+        "four_bursts": {
+          "median_ms": 1.460224,
+          "p95_ms": 2.122752,
+          "samples": 90
+        },
+        "part": {
+          "median_ms": 1.025024,
+          "p95_ms": 1.330176,
+          "samples": 90
+        }
+      }
+    }
+  ]
+}

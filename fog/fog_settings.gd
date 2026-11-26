@@ -69,6 +69,16 @@ extends Resource
 		emit_changed()
 
 @export_group("流体求解")
+enum PressureSolver { JACOBI, MULTIGRID }
+## Jacobi 档保留已有预设的迭代次数。
+@export var pressure_solver: PressureSolver = PressureSolver.JACOBI:
+	set(value):
+		pressure_solver = value
+		emit_changed()
+@export_range(1, 4, 1) var multigrid_cycles := 2:
+	set(value):
+		multigrid_cycles = clampi(value, 1, 4)
+		emit_changed()
 ## 压力迭代次数；增加会更好地约束局部散度，也增加 GPU 开销。
 @export_range(12, 100, 2) var pressure_iterations := 64:
 	set(value):

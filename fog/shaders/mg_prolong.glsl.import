@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://ciwmy33jotqga"
+path="res://.godot/imported/mg_prolong.glsl-4593a0721e10fb85e00d73ac074262b3.res"
+
+[deps]
+
+source_file="res://fog/shaders/mg_prolong.glsl"
+dest_files=["res://.godot/imported/mg_prolong.glsl-4593a0721e10fb85e00d73ac074262b3.res"]
+
+[params]
+

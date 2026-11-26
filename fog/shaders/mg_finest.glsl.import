@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://bxa526mw608ab"
+path="res://.godot/imported/mg_finest.glsl-ac5357705cbd9e5d669ec774d3ffe749.res"
+
+[deps]
+
+source_file="res://fog/shaders/mg_finest.glsl"
+dest_files=["res://.godot/imported/mg_finest.glsl-ac5357705cbd9e5d669ec774d3ffe749.res"]
+
+[params]
+

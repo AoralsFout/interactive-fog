@@ -1,0 +1,134 @@
+{
+  "vulkan_256": {
+    "jacobi": {
+      "cold": {
+        "relative_l2_residual": 0.26101413901458004,
+        "reference_relative_l2": 3.3214049379841557e-14,
+        "near_residual_rms": 1.122660237612297,
+        "near_velocity_rmse_mps": 0.7177016842449417,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.17815427851211516,
+        "gap_flux_m2ps": 0.9819793701171875,
+        "reference_gap_flux_m2ps": 2.2928742967477014
+      },
+      "matched": {
+        "relative_l2_residual": 0.2930047428755076,
+        "reference_relative_l2": 3.831382786349964e-14,
+        "near_residual_rms": 0.2661284533275444,
+        "near_velocity_rmse_mps": 0.08752937178327175,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.06742213202707772,
+        "gap_flux_m2ps": 0.88775634765625,
+        "reference_gap_flux_m2ps": 0.9669252903162435
+      },
+      "wake": {
+        "relative_l2_residual": 0.10420848294678664,
+        "reference_relative_l2": 2.442865415325132e-14,
+        "near_residual_rms": 0.03343055541919944,
+        "near_velocity_rmse_mps": 0.03394857336191378,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.0634816461399599,
+        "gap_flux_m2ps": 1.0611724853515625,
+        "reference_gap_flux_m2ps": 1.0352926786609302
+      },
+      "moved": {
+        "relative_l2_residual": 0.14308487788359497,
+        "reference_relative_l2": 2.6658219604478772e-14,
+        "near_residual_rms": 0.07415119799959279,
+        "near_velocity_rmse_mps": 0.053312310338285526,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.07755220751710865,
+        "gap_flux_m2ps": 0.9146499633789062,
+        "reference_gap_flux_m2ps": 0.8774400407736377
+      },
+      "sealed": {
+        "relative_l2_residual": 0.38526094825350277,
+        "reference_relative_l2": 2.4697868272305104e-14,
+        "near_residual_rms": 0.0241902565253256,
+        "near_velocity_rmse_mps": 0.03518496343592678,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.0484413740235525,
+        "unforced_side_max_mps": 0.0,
+        "unforced_side_max_pressure": 0.0
+      }
+    },
+    "multigrid": {
+      "cold": {
+        "relative_l2_residual": 0.2292212729291357,
+        "reference_relative_l2": 3.3214049379841557e-14,
+        "near_residual_rms": 1.0576066450979893,
+        "near_velocity_rmse_mps": 0.6100081314724863,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.15658538582543965,
+        "gap_flux_m2ps": 1.1834716796875,
+        "reference_gap_flux_m2ps": 2.2928742967477014
+      },
+      "matched": {
+        "relative_l2_residual": 0.2280929573506027,
+        "reference_relative_l2": 3.831382786349964e-14,
+        "near_residual_rms": 0.22308543944039577,
+        "near_velocity_rmse_mps": 0.07216936177773217,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.06162938805795464,
+        "gap_flux_m2ps": 0.9015655517578125,
+        "reference_gap_flux_m2ps": 0.9669252903162435
+      },
+      "wake": {
+        "relative_l2_residual": 0.030023481834337694,
+        "reference_relative_l2": 1.2727372468883362e-14,
+        "near_residual_rms": 0.01794580002774868,
+        "near_velocity_rmse_mps": 0.009427548837857829,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.05804069694605385,
+        "gap_flux_m2ps": 1.0390472412109375,
+        "reference_gap_flux_m2ps": 1.0311055832638758
+      },
+      "moved": {
+        "relative_l2_residual": 0.05035539346793437,
+        "reference_relative_l2": 1.285466617347439e-14,
+        "near_residual_rms": 0.026429494732638115,
+        "near_velocity_rmse_mps": 0.019058931796433365,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.061096088785147565,
+        "gap_flux_m2ps": 0.8749008178710938,
+        "reference_gap_flux_m2ps": 0.8716686023939818
+      },
+      "sealed": {
+        "relative_l2_residual": 0.32325068969811277,
+        "reference_relative_l2": 2.4697868272305104e-14,
+        "near_residual_rms": 0.012048459956775571,
+        "near_velocity_rmse_mps": 0.022536012862394803,
+        "blocked_face_max_mps": 0.0,
+        "post_divergence_rms": 0.040665668872090575,
+        "unforced_side_max_mps": 0.0,
+        "unforced_side_max_pressure": 0.0
+      }
+    }
+  },
+  "two_cycle_soak": {
+    "d3d12-32": {
+      "steps": 900,
+      "finite_checkpoints": 10,
+      "max_abs_pressure_in_checkpoints": 0.061431534588336945
+    },
+    "d3d12-256": {
+      "steps": 900,
+      "finite_checkpoints": 10,
+      "max_abs_pressure_in_checkpoints": 0.10488124191761017
+    },
+    "d3d12-512": {
+      "steps": 900,
+      "finite_checkpoints": 10,
+      "max_abs_pressure_in_checkpoints": 0.12062060087919235
+    },
+    "vulkan-256": {
+      "steps": 900,
+      "finite_checkpoints": 10,
+      "max_abs_pressure_in_checkpoints": 0.10409475862979889
+    }
+  },
+  "transport_checks": {
+    "d3d12": 16,
+    "vulkan": 16
+  }
+}

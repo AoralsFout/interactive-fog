@@ -10,8 +10,8 @@
 [ext_resource type="Script" uid="uid://byw8ou1et0tjo" path="res://fog/fog_interactor.gd" id="8_interactor"]
 [ext_resource type="PackedScene" uid="uid://qoom3gyhd6xw" path="res://demo/hud.tscn" id="9_hud"]
 [ext_resource type="Script" uid="uid://ci0th8joh5ei6" path="res://fog/fog_settings.gd" id="9_kbqbn"]
-[ext_resource type="Script" path="res://demo/thin_fog_renderer.gd" id="10_thin"]
-[ext_resource type="Script" path="res://fog/horizontal_slices.gd" id="11_slices"]
+[ext_resource type="Script" uid="uid://cgkkopwn2v3m4" path="res://demo/thin_fog_renderer.gd" id="10_thin"]
+[ext_resource type="Script" uid="uid://dhxhnqw6gta23" path="res://fog/horizontal_slices.gd" id="11_slices"]
 
 [sub_resource type="Environment" id="Environment_demo"]
 resource_local_to_scene = true
@@ -82,9 +82,10 @@ inner_radius = 0.98
 rings = 48
 ring_segments = 6
 
-[sub_resource type="Resource" id="Resource_kbqbn"]
+[sub_resource type="Resource" id="Resource_nr2wj"]
 resource_local_to_scene = true
 script = ExtResource("9_kbqbn")
+pressure_solver = 1
 thickness = 0.8500000000000001
 density = 5.0
 albedo = Color(1, 1, 1, 1)
@@ -207,14 +208,14 @@ directional_strength = 8.0
 swirl_strength = 2.0
 
 [node name="FogField" parent="." unique_id=1853580114 instance=ExtResource("2_fog")]
-settings = SubResource("Resource_kbqbn")
+settings = SubResource("Resource_nr2wj")
 
-[node name="HorizontalSlices" type="MultiMeshInstance3D" parent="FogField"]
+[node name="HorizontalSlices" type="MultiMeshInstance3D" parent="FogField" unique_id=1272518782]
 visible = false
 cast_shadow = 0
 script = ExtResource("11_slices")
 
 [node name="HUD" parent="." unique_id=842371717 instance=ExtResource("9_hud")]
 
-[node name="ThinFogRenderer" type="Node" parent="."]
+[node name="ThinFogRenderer" type="Node" parent="." unique_id=370223314]
 script = ExtResource("10_thin")

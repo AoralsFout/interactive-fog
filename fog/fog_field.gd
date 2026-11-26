@@ -209,7 +209,8 @@ func _advance_simulation(step: float) -> void:
 		settings.density_variation, settings.density_pattern_scale, settings.detail_reset_period, 0.0,
 		settings.vorticity_strength, float(_expansions.size()) / FogSimulationGPU.SHOCK_FLOAT_COUNT, 0.0, settings.max_compressed_density,
 	])
-	_simulation.advance(parameters, stamps, obstacles, rebuild, settings.pressure_iterations, _expansions)
+	_simulation.advance(parameters, stamps, obstacles, rebuild, settings.pressure_iterations, _expansions,
+			settings.multigrid_cycles if settings.pressure_solver == FogSettings.PressureSolver.MULTIGRID else 0)
 	_render_material.set_shader_parameter("simulation_time", _simulation_time)
 	_needs_reset = false
 

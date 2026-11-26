@@ -33,7 +33,7 @@ flowchart TD
     Noise --> Volume
 ```
 
-速度采用交错 MAC 存储，压力与散度使用配对的前后差分。固体边界禁止穿入，区域边界开放。压力采用有限次 Jacobi 迭代与上一时间步的压力作为初值，因此仅近似满足不可压缩约束。
+速度采用交错 MAC 存储，压力与散度使用配对的前后差分。固体边界禁止穿入，区域边界开放。压力以上一步为初值。演示主场景使用多重网格，每步 2 个 V 循环；新建的 FogSettings 默认使用 64 轮 Jacobi。可在 FogField 的 Settings → 流体求解 → Pressure Solver 切换求解器，通过 Multigrid Cycles 调整每步 V 循环数。切换求解器保留压力、速度和雾的搬运历史。
 
 密度使用 RK2 回溯、双三次重建及带局部极值限制的 MacCormack 校正，减少细丝反复搬运后的扩散。初始化图案包含大尺度疏密和窄密度脊；之后细节作为真实状态随速度搬运。仍存在采样与数值耗散，不能保证无限细的结构长期保持。
 
@@ -42,6 +42,35 @@ flowchart TD
 涡量约束用于补偿速度搬运损失。它不能制造速度网格无法分辨的微涡。默认 24 × 20 m 区域中，速度格约 9.4 × 7.8 cm，密度格约 4.7 × 3.9 cm；实际可分辨的涡旋需要跨越多个速度格。
 
 方法参考：[GPU Gems 38：GPU 流体](https://developer.nvidia.com/gpugems/gpugems/part-vi-beyond-triangles/chapter-38-fast-fluid-dynamics-simulation-gpu)、[GPU Gems 3 / 30：高阶搬运](https://developer.nvidia.com/gpugems/gpugems3/part-v-physics-simulation/chapter-30-real-time-simulation-and-rendering-3d-fluids)。
+
+### 多重网格压力原型
+
+最细层使用与 Jacobi 相同的离散压力方程。每个 V 循环先做 2 次加权 Jacobi 平滑，把细网格残差限制到逐级减半的粗网格，在边长至多 8 的最粗层做 16 次平滑。向上逐级加回连通面插值的误差修正（阻尼 0.65），每层再平滑 4 次。2×2 子块中不连通的流体不合并，固体面封闭，域外修正压力为零。粗层随首次使用分配，障碍或模拟域变化时重建系数。
+
+RTX 3050 Ti Laptop、Godot 4.7.2、D3D12、256² 速度 / 512² 密度，固定步长 1/30 s。每种配置独立运行三轮，每种交互预热 15 步、采样 90 步。下表为三轮完整模拟 GPU 单步中位数的中位数，单位 ms；测量区间包含速度、压力、密度与交互搬运，首次分配和拓扑重建在预热期完成。
+
+| 交互 | Jacobi 64 | 2 个 V 循环 | 3 个 V 循环 |
+|---|---:|---:|---:|
+| 普通流动 | 0.915 | 0.794 | 1.060 |
+| 持续划开 | 0.966 | 0.830 | 1.026 |
+| 四处径向冲击 | 1.409 | 1.285 | 1.464 |
+
+精度测试在圆柱和带 0.6 m 开口的薄墙周围施力。冷启动使用零初始压力，热启动从相同的 60 步 Jacobi 历史分叉。按 GPU 实际细网格系数计算相对残差 `‖b − Lp‖₂ / ‖b‖₂`，用同一矩阵的双精度稀疏直接解作速度参考。参考速度使用与 GPU 相同的压力梯度、固体面规则和速度限幅。
+
+| 256² 同输入单步 | Jacobi 64 | 2 个 V 循环 | 3 个 V 循环 |
+|---|---:|---:|---:|
+| 冷启动相对压力残差 | 0.2610 | 0.2292 | 0.1640 |
+| 热启动相对压力残差 | 0.2931 | 0.2281 | 0.1442 |
+| 热启动距障碍 0.5 m 内的 MAC 速度 RMSE，m/s | 0.0875 | 0.0721 | 0.0505 |
+| 热启动窄缝通量，m²/s（参考 0.967） | 0.888 | 0.901 | 0.908 |
+
+各算法独立演化至第 91 步时，障碍附近对各自单步参考解的速度 RMSE 分别为 0.0340、0.0094、0.0039 m/s；移墙后第 10 步分别为 0.0533、0.0191、0.0101 m/s。三种算法所有封闭 MAC 面上的最大法向速度均为零，整墙隔离试验的无外力一侧保持零压力、零速度。在 65² 的奇数网格上，共同热启动的残差分别为 0.0400、0.0686、0.0271，小网格的精度排序随循环数变化。
+
+两个 V 循环通过 D3D12 和 Vulkan 各 16 项传输回归。在 D3D12 的 32²、256²、512² 和 Vulkan 的 256² 网格上，各运行 900 步并移动两次障碍，10 个检查点的压力全部有限。Vulkan 的同输入热启动残差为 Jacobi 0.2930、两个 V 循环 0.2281。Vulkan 进程退出时两种配置均打印了 `OpVectorExtractDynamic is not supported yet`，本次验证未定位该消息来源。
+
+[障碍速度场对照](artifacts/pressure-solver/obstacle-flow.png) · [逐轮 GPU 计时](artifacts/pressure-solver/timings.json) · [全部残差与速度指标](artifacts/pressure-solver/accuracy.json) · [跨后端与长时验证](artifacts/pressure-solver/validation.json)
+
+复测计时运行 `godot --path . --script res://tests/flow_compute_budget.gd -- --multigrid --cycles=2`，省略用户参数即可测 Jacobi。精度采集使用 `tests/pressure_comparison.gd`，在 `--size=256` 与 `--size=65` 上分别运行 Jacobi（无求解器参数）、`--multigrid` 和 `--multigrid --cycles=3`。随后运行 `python tests/pressure_comparison.py`（NumPy、SciPy、Pillow）生成指标和图像。加上 `--soak` 可单独检查 900 步中两次移墙后的压力稳定性。
 
 ### 径向扩散
 
