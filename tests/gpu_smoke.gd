@@ -109,6 +109,20 @@ func _run() -> void:
 	await _frames(4)
 	_check(hud.fog_grid == high_grid and retained.get_image().get_data() == frozen,
 		"restoring high quality keeps the frozen material coordinates")
+	selector.item_selected.emit(2)
+	await _frames(5)
+	var thin_frame := root.get_texture().get_image()
+	var original_density := _field.settings.density
+	_field.settings.density = 0.0
+	await _frames(4)
+	_check(_image_difference(thin_frame, root.get_texture().get_image()) > 0.002,
+		"thin renderer draws the field and responds to density while paused")
+	_field.settings.density = original_density
+	selector.item_selected.emit(0)
+	await _frames(5)
+	_check(retained.get_image().get_data() == frozen and
+		(_demo.get_node("WorldEnvironment") as WorldEnvironment).environment.volumetric_fog_enabled,
+		"switching back from thin fog restores native fog and preserves the frozen field")
 	_field.settings.density = 0.0
 	await _frames(4)
 	var density_zero := root.get_texture().get_image()

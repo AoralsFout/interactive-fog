@@ -10,8 +10,10 @@
 [ext_resource type="Script" uid="uid://byw8ou1et0tjo" path="res://fog/fog_interactor.gd" id="8_interactor"]
 [ext_resource type="PackedScene" uid="uid://qoom3gyhd6xw" path="res://demo/hud.tscn" id="9_hud"]
 [ext_resource type="Script" uid="uid://ci0th8joh5ei6" path="res://fog/fog_settings.gd" id="9_kbqbn"]
+[ext_resource type="Script" path="res://demo/thin_fog_renderer.gd" id="10_thin"]
 
 [sub_resource type="Environment" id="Environment_demo"]
+resource_local_to_scene = true
 background_mode = 1
 background_color = Color(0.025, 0.04, 0.06, 1)
 ambient_light_source = 2
@@ -207,3 +209,6 @@ swirl_strength = 2.0
 settings = SubResource("Resource_kbqbn")
 
 [node name="HUD" parent="." unique_id=842371717 instance=ExtResource("9_hud")]
+
+[node name="ThinFogRenderer" type="Node" parent="."]
+script = ExtResource("10_thin")

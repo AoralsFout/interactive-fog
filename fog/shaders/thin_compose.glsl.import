@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://dxma8pohh5ofn"
+path="res://.godot/imported/thin_compose.glsl-74a288591e977c850310e97752fcc827.res"
+
+[deps]
+
+source_file="res://fog/shaders/thin_compose.glsl"
+dest_files=["res://.godot/imported/thin_compose.glsl-74a288591e977c850310e97752fcc827.res"]
+
+[params]
+

@@ -1,0 +1,21 @@
+{
+	"capture": true,
+	"driver": "d3d12",
+	"end_state_sha256": "03fdf99803f830242681bae1681f0fed19580d0e4b6f92d0bf77b1ccefbb55fb",
+	"godot": "4.7.2-stable (official)",
+	"gpu": "NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+	"keyframe_state_sha256": {
+		"part": "e1c3e460c9ecb5993001c6855a6761fddd5b2fbf25032dec72cd4314296eaf5b",
+		"wake": "a7e85072810b7e199ca8033a39144d74025d46feb2f4a388a2944327502b7587",
+		"wave": "1324cb22a9f45939a6294706f4c6ea43c91d2f91e3331386eb20063e92504c15"
+	},
+	"mode": "performance",
+	"native_fog_enabled": true,
+	"run": 1,
+	"samples": 0,
+	"simulation_seconds": 5.99999999999999,
+	"viewport": [
+		1920,
+		1080
+	]
+}

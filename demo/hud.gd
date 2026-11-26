@@ -1,6 +1,7 @@
 class_name FogDemoHUD
 extends CanvasLayer
 signal brush_mode_selected(mode: int)
+signal thin_fog_selected(active: bool)
 ## 调参面板独立场景。% 唯一节点引用只在此 HUD 的 owner 范围内解析。
 ## 这些滑块修改本次运行的资源；长期预设请在编辑器的 FogSettings 中保存。
 
@@ -53,6 +54,7 @@ func set_fog_quality(index: int) -> void:
 	fog_grid = PERFORMANCE_GRID if index == 1 else _project_grid
 	RenderingServer.environment_set_volumetric_fog_volume_size(fog_grid.x, fog_grid.y)
 	%FogQuality.select(index)
+	thin_fog_selected.emit(index == 2)
 
 
 func _exit_tree() -> void:
