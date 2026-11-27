@@ -18,6 +18,8 @@ func _run() -> void:
 		quit(1)
 		return
 	_demo = load("res://demo/main.tscn").instantiate() as Node3D
+	# 后续断言需要单独移动测试墙，并在切换渲染模式时保持障碍静止。
+	_demo.get_node("Obstacles/MovingWall").free()
 	root.add_child(_demo)
 	_field = _demo.get_node("FogField") as InteractiveFogField
 	_demo.set_process(false)

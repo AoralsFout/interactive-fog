@@ -12,6 +12,7 @@
 [ext_resource type="Script" uid="uid://ci0th8joh5ei6" path="res://fog/fog_settings.gd" id="9_kbqbn"]
 [ext_resource type="Script" uid="uid://cgkkopwn2v3m4" path="res://demo/thin_fog_renderer.gd" id="10_thin"]
 [ext_resource type="Script" uid="uid://dhxhnqw6gta23" path="res://fog/horizontal_slices.gd" id="11_slices"]
+[ext_resource type="PackedScene" path="res://demo/obstacles/moving_wall.tscn" id="12_moving_wall"]
 
 [sub_resource type="Environment" id="Environment_demo"]
 resource_local_to_scene = true
@@ -142,6 +143,8 @@ height = 1.65
 transform = Transform3D(0.8660254, 0, 0.5, 0, 1, 0, -0.5, 0, 0.8660254, 4, 0, -3.7)
 box_size = Vector2(3.2, 0.8)
 height = 2.0
+
+[node name="MovingWall" parent="Obstacles" instance=ExtResource("12_moving_wall")]
 
 [node name="Lighting" type="Node3D" parent="." unique_id=673796575]
 
