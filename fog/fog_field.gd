@@ -266,7 +266,7 @@ func _collect_stamps(step: float) -> PackedFloat32Array:
 		if interactor.mode == FogInteractor3D.Mode.PART:
 			var cut_previous: Vector3 = _cut_positions.get(id, position_now)
 			live_cut_positions[id] = position_now
-			if _cut_positions.has(id) and (position_now.distance_to(cut_previous) > interactor.minimum_speed * step or interactor.emit_when_stationary):
+			if _cut_positions.has(id) and (velocity.length() > interactor.minimum_speed or interactor.emit_when_stationary):
 				part(cut_previous, position_now, interactor.radius, interactor.part_speed, interactor.part_duration)
 			continue
 		if not interactor.emit_when_stationary and velocity.length() < interactor.minimum_speed:

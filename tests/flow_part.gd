@@ -60,26 +60,29 @@ func _run() -> void:
 	_field.settings.wind_velocity = Vector2.ZERO
 	_field.settings.wind_response = 0.12
 	await _reset()
-	var interactor := FogInteractor3D.new()
-	interactor.mode = FogInteractor3D.Mode.PART
-	interactor.radius = 0.65
-	interactor.position = Vector3(-3, 0, 0)
-	root.add_child(interactor)
+	var player := (load("res://demo/player.tscn") as PackedScene).instantiate() as FogDemoPlayer
+	player.position = Vector3(-3, 0.1, 0)
+	root.add_child(player)
+	player.set_physics_process(false)
+	var interactor := player.get_node("FogInteractor") as FogInteractor3D
 	await _steps(1)
+	player.position.y = 0.0
+	await _steps(4)
+	_check(_sample(_state(), Vector2(-3.0, 0.0)).r > 0.98, "vertical settling alone leaves the fog undisturbed")
 	for index in range(16):
-		interactor.position.x += 0.2
+		player.position.x += 0.2
 		await _steps(1)
 	await _steps(12)
-	_check(_sample(_state(), Vector2(-1.5, 0.0)).r < 0.3, "moving PART interactor builds a persistent stroke")
+	_check(_sample(_state(), Vector2(-1.5, 0.0)).r < 0.3, "moving player leaves a persistent opening")
 	interactor.enabled = false
-	interactor.position.x = 5.0
+	player.position.x = 5.0
 	await _steps(1)
 	interactor.enabled = true
 	await _steps(1)
-	interactor.position.x = 5.2
+	player.position.x = 5.2
 	await _steps(12)
 	_check(_sample(_state(), Vector2(2.5, 0.0)).r > 0.95, "disabled stroke gap is not bridged on re-enable")
-	interactor.queue_free()
+	player.queue_free()
 	await _frames(2)
 	await _reset()
 	_field.part(Vector3(-2, 0, 0), Vector3(2, 0, 0))
