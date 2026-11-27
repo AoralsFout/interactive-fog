@@ -161,20 +161,76 @@ func _bounded(image: Image) -> bool:
 
 func _input_path() -> void:
 	var demo := load("res://demo/main.tscn").instantiate() as Node3D
+	demo.get_node("Obstacles/MovingWall").free()
+	_field = demo.get_node("FogField") as InteractiveFogField
+	_field.settings.wind_velocity = Vector2.ZERO
+	_field.settings.turbulence_strength = 0.0
+	_field.settings.density_variation = 0.0
 	root.add_child(demo)
 	demo.set_process(false)
-	demo.get_node("Player").set_physics_process(false)
-	_field = demo.get_node("FogField") as InteractiveFogField
+	var player := demo.get_node("Player") as FogDemoPlayer
+	player.set_physics_process(false)
 	await _frames(8)
 	_field.set_process(false)
-	var initial := _state()
-	demo.get_node("MouseBrush").position = Vector3(0.0, 0.05, 1.0)
-	demo.set("_valid_brush", true)
-	var event := InputEventAction.new()
-	event.action = &"fog_burst"
-	event.pressed = true
-	demo._unhandled_input(event)
-	await _steps(8)
-	_check(_difference(initial, _state()) > 0.002, "Space input drives the actual radial transport path")
+	var hud := demo.get_node("HUD") as FogDemoHUD
+	var burst_button := hud.get_node("%BurstButton") as Button
+	burst_button.pressed.emit()
+	_check(demo.get("brush_mode") == 2 and burst_button.button_pressed, "visible tool button selects burst")
+	var camera := demo.get_node("CameraRig/Camera3D") as Camera3D
+	var center := Vector3(0.0, 0.0, 6.0)
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.position = camera.unproject_position(center)
+	click.pressed = true
+	root.push_input(click, true)
+	var release := click.duplicate() as InputEventMouseButton
+	release.pressed = false
+	root.push_input(release, true)
+	_check(_field.get("_active_bursts").size() == 1 and not demo.get("_painting"), "one left click queues a burst without starting a stroke")
+	await _steps(10)
+	_check(_sample(_state(), Vector2(center.x, center.z)).r < 0.6, "left click moves fog outward from the clicked position")
+	await _jump_path(player, hud)
 	demo.queue_free()
 	await _frames(4)
+
+
+func _jump_path(player: FogDemoPlayer, hud: FogDemoHUD) -> void:
+	var takeoffs: Array[Vector3] = []
+	var landings: Array[Vector3] = []
+	player.jumped.connect(func(point: Vector3) -> void: takeoffs.append(point))
+	player.landed.connect(func(point: Vector3) -> void: landings.append(point))
+	(player.get_node("FogInteractor") as FogInteractor3D).enabled = false
+	player.position = Vector3(-4.0, 0.0, 6.0)
+	player.set_physics_process(true)
+	await _reset()
+	await _frames(10)
+	_check(player.is_on_floor() and landings.is_empty() and _field.get("_active_bursts").is_empty(), "settling onto the floor at spawn emits no landing effect")
+	var part_button := hud.get_node("%PartButton") as Button
+	part_button.grab_focus()
+	var space := InputEventKey.new()
+	space.device = 0
+	space.physical_keycode = KEY_SPACE
+	space.pressed = true
+	Input.parse_input_event(space)
+	Input.flush_buffered_events()
+	await _frames(4)
+	_check(takeoffs.size() == 1 and player.position.y > 0.1 and not player.is_on_floor(), "physical Space takes the player off the floor")
+	Input.action_press(&"move_right")
+	await _steps(8)
+	var gathered := _sample(_state(), Vector2(-4.0, 6.0)).r
+	_check(gathered > 1.1 and gathered < 3.0, "takeoff draws fog into the starting footprint: %.3f" % gathered)
+	await _frames(48)
+	Input.action_release(&"move_right")
+	var release := space.duplicate() as InputEventKey
+	release.pressed = false
+	Input.parse_input_event(release)
+	Input.flush_buffered_events()
+	_check(takeoffs.size() == 1 and landings.size() == 1 and player.is_on_floor(), "holding Space produces one jump and one landing")
+	_check(not part_button.button_pressed, "Space does not activate a focused fog tool")
+	if landings.is_empty():
+		return
+	var landing := landings[0]
+	_check(landing.distance_to(Vector3(-4.0, 0.0, 6.0)) > 1.2, "jump can land away from the takeoff point")
+	await _steps(11)
+	var dispersed := _sample(_state(), Vector2(landing.x, landing.z)).r
+	_check(dispersed < 0.7, "landing sends fog outward at the actual contact point: %.3f" % dispersed)

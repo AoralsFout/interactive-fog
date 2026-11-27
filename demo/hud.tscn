@@ -128,6 +128,16 @@ button_group = SubResource("Group_brush")
 text = "划开"
 tooltip_text = "左键沿路径拨开雾气；M 切换工具"
 
+[node name="BurstButton" type="Button" parent="Layout/ControlsPanel/Content/BrushModes"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+button_group = SubResource("Group_brush")
+text = "爆开"
+tooltip_text = "左键单击，从光标位置向外爆开雾气"
+
 [node name="Shortcut" type="Label" parent="Layout/ControlsPanel/Content/BrushModes"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
@@ -288,8 +298,8 @@ mouse_filter = 2
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
 text = "WASD / arrows  move     Shift  sprint
-Left drag  selected tool     M  switch tool
-Space  expand fog at cursor
+Left click / drag  selected tool     M  cycle tools
+Space  jump
 Right drag  orbit     Wheel  zoom
 R  reset     P  pause     Tab  field view"
 

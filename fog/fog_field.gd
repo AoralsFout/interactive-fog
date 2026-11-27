@@ -151,6 +151,16 @@ func disturb(world_position: Vector3, radius: float, velocity := Vector2.ZERO,
 ## 径向扩散：推开中心、在移动波前压缩雾量，保留同一密度和材质坐标的历史。
 func burst(world_position: Vector3, radius: float, duration := 0.65,
 		strength := 1.0, swirl := 1.5, rim_width := 0.45) -> void:
+	_queue_radial_flow(world_position, radius, duration, maxf(strength, 0.0), swirl, rim_width)
+
+
+## 向中心聚雾，沿用径向扩散的通量搬运与障碍遮挡。
+func gather(world_position: Vector3, radius: float, duration := 0.24, strength := 0.18) -> void:
+	_queue_radial_flow(world_position, radius, duration, -maxf(strength, 0.0), 0.0, 0.25)
+
+
+func _queue_radial_flow(world_position: Vector3, radius: float, duration: float,
+		strength: float, swirl: float, rim_width: float) -> void:
 	if _active_bursts.size() >= FogSimulationGPU.MAX_BURSTS or _pending_impulses.size() + _active_bursts.size() >= FogSimulationGPU.MAX_STAMPS:
 		return
 	_active_bursts.append(FogBurst.new(world_position, radius, duration, strength, swirl, rim_width))

@@ -70,6 +70,7 @@ func _ready() -> void:
 	%FogQuality.item_selected.connect(set_fog_quality)
 	%StirButton.pressed.connect(_select_brush_mode.bind(0))
 	%PartButton.pressed.connect(_select_brush_mode.bind(1))
+	%BurstButton.pressed.connect(_select_brush_mode.bind(2))
 	_field.textures_changed.connect(_bind_debug_textures)
 	_field.settings_replaced.connect(_connect_settings)
 	_connect_settings()
@@ -109,6 +110,7 @@ func _select_brush_mode(mode: int) -> void:
 func set_brush_mode(mode: int) -> void:
 	%StirButton.set_pressed_no_signal(mode == 0)
 	%PartButton.set_pressed_no_signal(mode == 1)
+	%BurstButton.set_pressed_no_signal(mode == 2)
 
 
 func toggle_debug() -> void:

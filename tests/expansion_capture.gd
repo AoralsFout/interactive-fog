@@ -1,5 +1,5 @@
 extends SceneTree
-## 记录真实 Space 输入产生的径向扩散和随后数秒的细雾流动。
+## 记录爆开工具的左键径向扩散和随后数秒的细雾流动。
 
 const OUTPUT := "res://artifacts/expansion/"
 
@@ -26,19 +26,19 @@ func _run() -> void:
 	rig.distance = 14.0
 	rig.pitch_degrees = 55.0
 	rig.target_offset = Vector3(0.0, 0.2, 1.0)
-	demo.get_node("MouseBrush").position = Vector3(0.0, 0.05, 1.0)
-	demo.get_node("MouseBrush/FogInteractor").set("enabled", false)
+	demo.set_brush_mode(2)
+	var camera := demo.get_node("CameraRig/Camera3D") as Camera3D
 	for index in range(24):
 		await process_frame
 		await RenderingServer.frame_post_draw
 	field.set_process(false)
 	for index in range(240):
 		if index == 30:
-			demo.set("_valid_brush", true)
-			var event := InputEventAction.new()
-			event.action = &"fog_burst"
-			event.pressed = true
-			demo._unhandled_input(event)
+			var click := InputEventMouseButton.new()
+			click.button_index = MOUSE_BUTTON_LEFT
+			click.position = camera.unproject_position(Vector3(0.0, 0.0, 1.0))
+			click.pressed = true
+			demo._unhandled_input(click)
 		field._advance_simulation(1.0 / 30.0)
 		await process_frame
 		await RenderingServer.frame_post_draw

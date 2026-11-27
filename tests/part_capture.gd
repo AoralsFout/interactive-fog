@@ -43,9 +43,10 @@ func _run() -> void:
 		var t := clampf(float(index - 30) / 90.0, 0.0, 1.0)
 		brush.position = Vector3(-2.5 + t * 5.0, 0.05, 1.0 + sin(t * PI))
 		if index == 30:
-			demo.set("_valid_brush", true)
+			var camera := demo.get_node("CameraRig/Camera3D") as Camera3D
 			var click := InputEventMouseButton.new()
 			click.button_index = MOUSE_BUTTON_LEFT
+			click.position = camera.unproject_position(Vector3(brush.position.x, 0.0, brush.position.z))
 			click.pressed = true
 			demo._unhandled_input(click)
 		interactor.enabled = index >= 30 and index < 120

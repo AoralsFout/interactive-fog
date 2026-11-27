@@ -1,11 +1,11 @@
 extends Node3D
 ## 演示输入与面板胶水。雾算法完全位于 fog/，不依赖此控制器或这些 UI 节点。
 signal brush_mode_changed(mode: int)
-enum BrushMode { STIR, PART }
+enum BrushMode { STIR, PART, BURST }
 
 @export var brush_mode: BrushMode = BrushMode.STIR:
 	set(value):
-		var next := clampi(value, BrushMode.STIR, BrushMode.PART)
+		var next := clampi(value, BrushMode.STIR, BrushMode.BURST)
 		if brush_mode == next:
 			return
 		brush_mode = next
@@ -42,8 +42,12 @@ enum BrushMode { STIR, PART }
 		part_duration = value
 		if is_node_ready():
 			_sync_brush_shape()
-@export_group("空格径向扩散")
-@export_range(0.5, 8.0, 0.1, "suffix:m") var burst_radius := 3.0
+@export_group("鼠标爆开")
+@export_range(0.5, 8.0, 0.1, "suffix:m") var burst_radius := 3.0:
+	set(value):
+		burst_radius = value
+		if is_node_ready():
+			_sync_brush_shape()
 @export_range(0.0, 2.0, 0.05) var burst_strength := 1.0
 ## 时间过短时会按冲击速度上限自动延长，保持搬运稳定。
 @export_range(0.2, 2.0, 0.05, "suffix:s") var burst_duration := 0.65
@@ -55,7 +59,7 @@ enum BrushMode { STIR, PART }
 @onready var _brush := get_node(brush_path) as Node3D
 @onready var _brush_interactor := _brush.get_node("FogInteractor") as FogInteractor3D
 @onready var _brush_ring := _brush.get_node("Ring") as MeshInstance3D
-@onready var _player := get_node(player_path) as Node3D
+@onready var _player := get_node(player_path) as FogDemoPlayer
 @onready var _hud := $HUD as FogDemoHUD
 
 var _painting := false
@@ -72,6 +76,8 @@ func _ready() -> void:
 	_hud.brush_mode_selected.connect(set_brush_mode)
 	_hud.fog_quality_selected.connect(_set_fog_renderer)
 	brush_mode_changed.connect(_hud.set_brush_mode)
+	_player.jumped.connect(_gather_at_takeoff)
+	_player.landed.connect(_spread_at_landing)
 	_sync_brush_mode()
 
 
@@ -97,16 +103,30 @@ func _exit_tree() -> void:
 func _sync_brush_mode() -> void:
 	_brush_interactor.mode = FogInteractor3D.Mode.PART if brush_mode == BrushMode.PART else FogInteractor3D.Mode.STIR
 	_sync_brush_shape()
-	_cursor_material.albedo_color = Color(1.0, 0.68, 0.3) if brush_mode == BrushMode.PART else Color(0.44, 0.85, 0.78)
+	match brush_mode:
+		BrushMode.STIR:
+			_cursor_material.albedo_color = Color(0.44, 0.85, 0.78)
+		BrushMode.PART:
+			_cursor_material.albedo_color = Color(1.0, 0.68, 0.3)
+		BrushMode.BURST:
+			_cursor_material.albedo_color = Color(0.78, 0.66, 1.0)
 	brush_mode_changed.emit(brush_mode)
 
 
 func _sync_brush_shape() -> void:
-	var radius := part_radius if brush_mode == BrushMode.PART else brush_radius
-	_brush_interactor.radius = radius
+	_brush_interactor.radius = part_radius if brush_mode == BrushMode.PART else brush_radius
 	_brush_interactor.part_speed = part_speed
 	_brush_interactor.part_duration = part_duration
+	var radius := burst_radius if brush_mode == BrushMode.BURST else _brush_interactor.radius
 	_brush_ring.scale = Vector3(radius, 1.0, radius)
+
+
+func _gather_at_takeoff(foot_position: Vector3) -> void:
+	_field.gather(foot_position, 1.0)
+
+
+func _spread_at_landing(foot_position: Vector3) -> void:
+	_field.burst(foot_position, 1.45, 0.32, 0.55, 0.0, 0.3)
 
 
 func _process(_delta: float) -> void:
@@ -114,17 +134,7 @@ func _process(_delta: float) -> void:
 
 
 func _update_brush() -> void:
-	var mouse := get_viewport().get_mouse_position()
-	var ray_origin := _camera.project_ray_origin(mouse)
-	var ray_direction := _camera.project_ray_normal(mouse)
-	var ground_plane := Plane(Vector3.UP, _field.global_position.y)
-	var hit: Variant = ground_plane.intersects_ray(ray_origin, ray_direction)
-	_valid_brush = hit != null
-	if _valid_brush:
-		var point: Vector3 = hit
-		var local := point - _field.global_position
-		_valid_brush = absf(local.x) < _field.settings.area_size.x * 0.5 and absf(local.z) < _field.settings.area_size.y * 0.5
-		_brush.global_position = point + Vector3.UP * 0.045
+	_update_brush_position(get_viewport().get_mouse_position())
 	# GUI 消耗按下事件；松开状态还通过 Input 检查，避免在面板上松开时留下粘连笔刷。
 	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		_painting = false
@@ -136,19 +146,42 @@ func _update_brush() -> void:
 	_brush_interactor.enabled = _valid_brush and _painting and not over_panel
 
 
+func _update_brush_position(mouse: Vector2) -> void:
+	var ray_origin := _camera.project_ray_origin(mouse)
+	var ray_direction := _camera.project_ray_normal(mouse)
+	var ground_plane := Plane(Vector3.UP, _field.global_position.y)
+	var hit: Variant = ground_plane.intersects_ray(ray_origin, ray_direction)
+	_valid_brush = hit != null
+	if _valid_brush:
+		var point: Vector3 = hit
+		var local := point - _field.global_position
+		_valid_brush = absf(local.x) < _field.settings.area_size.x * 0.5 and absf(local.z) < _field.settings.area_size.y * 0.5
+		_brush.global_position = point + Vector3.UP * 0.045
+
+
+func _input(event: InputEvent) -> void:
+	# 空格专用于跳跃，避免输入同时激活有焦点的面板按钮。
+	if event.is_action(&"jump"):
+		get_viewport().set_input_as_handled()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		_painting = event.pressed
-		if event.pressed and _valid_brush:
-			if brush_mode == BrushMode.PART:
-				_field.part(_brush.global_position, _brush.global_position, part_radius, part_speed, part_duration)
-			else:
-				_field.disturb(_brush.global_position, brush_radius, Vector2.ZERO, brush_click_swirl)
+		if event.pressed:
+			_update_brush_position(event.position)
+		_painting = event.pressed and _valid_brush and brush_mode != BrushMode.BURST
+		if not event.pressed or not _valid_brush:
+			return
+		var center := _brush.global_position
+		match brush_mode:
+			BrushMode.STIR:
+				_field.disturb(center, brush_radius, Vector2.ZERO, brush_click_swirl)
+			BrushMode.PART:
+				_field.part(center, center, part_radius, part_speed, part_duration)
+			BrushMode.BURST:
+				_field.burst(center, burst_radius, burst_duration, burst_strength, burst_swirl, burst_rim_width)
 	elif event.is_action_pressed("fog_tool_toggle"):
-		brush_mode = BrushMode.STIR if brush_mode == BrushMode.PART else BrushMode.PART
-	elif event.is_action_pressed("fog_burst"):
-		var position_for_burst := _brush.global_position if _valid_brush else _player.global_position
-		_field.burst(position_for_burst, burst_radius, burst_duration, burst_strength, burst_swirl, burst_rim_width)
+		brush_mode = (brush_mode + 1) % BrushMode.size()
 	elif event.is_action_pressed("fog_reset"):
 		_field.reset_simulation()
 	elif event.is_action_pressed("fog_pause"):

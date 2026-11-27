@@ -30,7 +30,7 @@ func _run() -> void:
 	# 同时验证物理键码，防止项目配置能加载但按键无法匹配。
 	var keys := {
 		"move_forward": KEY_W, "move_back": KEY_S, "move_left": KEY_A, "move_right": KEY_D,
-		"sprint": KEY_SHIFT, "fog_burst": KEY_SPACE, "fog_reset": KEY_R,
+		"sprint": KEY_SHIFT, "jump": KEY_SPACE, "fog_reset": KEY_R,
 		"fog_pause": KEY_P, "fog_debug": KEY_TAB,
 	}
 	for action in keys:

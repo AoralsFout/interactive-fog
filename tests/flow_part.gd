@@ -130,21 +130,21 @@ func _ui() -> void:
 	(hud.get_node("%PartButton") as Button).pressed.emit()
 	_check(demo.get("brush_mode") == 1 and (hud.get_node("%PartButton") as Button).button_pressed, "visible tool button selects parting")
 	var keyboard := InputEventKey.new()
+	keyboard.device = 0
 	keyboard.physical_keycode = KEY_M
 	keyboard.pressed = true
 	_check(InputMap.event_is_action(keyboard, "fog_tool_toggle"), "physical M key maps to tool switching")
-	var toggle := InputEventAction.new()
-	toggle.action = &"fog_tool_toggle"
-	toggle.pressed = true
-	demo._unhandled_input(toggle)
-	_check(demo.get("brush_mode") == 0 and (hud.get_node("%StirButton") as Button).button_pressed, "shortcut and selected button stay synchronized")
+	root.push_input(keyboard, true)
+	_check(demo.get("brush_mode") == 2 and (hud.get_node("%BurstButton") as Button).button_pressed, "shortcut advances from parting to burst")
+	root.push_input(keyboard, true)
+	_check(demo.get("brush_mode") == 0 and (hud.get_node("%StirButton") as Button).button_pressed, "shortcut wraps back to stirring")
 	demo.set("_painting", true)
 	demo.set_brush_mode(1)
 	_check(not demo.get("_painting") and not (demo.get_node("MouseBrush/FogInteractor") as FogInteractor3D).enabled, "switching tools ends the current stroke")
-	demo.get_node("MouseBrush").position = Vector3(0, 0.05, 1)
-	demo.set("_valid_brush", true)
+	var camera := demo.get_node("CameraRig/Camera3D") as Camera3D
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
+	click.position = camera.unproject_position(Vector3(0, 0, 1))
 	click.pressed = true
 	demo._unhandled_input(click)
 	await _steps(12)

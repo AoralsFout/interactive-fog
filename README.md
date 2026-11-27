@@ -12,9 +12,9 @@ Godot 4.7 / Forward+ 的浅层交互雾。二维流体负责水平运动，主�
 | --- | --- |
 | WASD / 方向键、Shift | 角色移动、加速，沿走过的路径向两侧拨雾 |
 | 左键拖动 | 搅动：推动和卷动；划开：沿路径把雾拨向两侧 |
-| 左键单击 | 搅动时注入小旋涡；划开时拨出局部缺口 |
-| M / 面板工具按钮 | 切换“搅动”和“划开”；默认搅动 |
-| Space | 从鼠标位置径向推开雾，在移动波前堆积并留下卷曲尾流 |
+| 左键单击 | 搅动会注入小旋涡，划开会拨出局部缺口，爆开会从光标处径向推雾 |
+| M / 面板工具按钮 | 在“搅动”“划开”“爆开”之间切换，默认搅动 |
+| Space | 跳跃，起跳时脚下轻微聚雾，落地时从接触点向外散雾 |
 | 右键拖动、滚轮 | 环绕相机、缩放 |
 | R / P / Tab | 重置 / 暂停 / 二维场图 |
 
@@ -226,7 +226,7 @@ godot --path . --script res://tests/flow_compute_budget.gd
 godot --path . --fixed-fps 60 --script res://tests/flow_capture.gd
 ffmpeg -framerate 15 -i artifacts/flow-transport/frames/%03d.png -c:v libx264 -crf 18 -pix_fmt yuv420p artifacts/flow-transport/interaction.mp4
 
-# 真实 Space 输入的扩散与随后尾流：120 帧 / 15 FPS / 8 秒。
+# 爆开工具左键触发的扩散与随后尾流：120 帧 / 15 FPS / 8 秒。
 godot --path . --fixed-fps 60 --script res://tests/expansion_capture.gd
 ffmpeg -framerate 15 -i artifacts/expansion/frames/%03d.png -c:v libx264 -crf 18 -pix_fmt yuv420p artifacts/expansion/expansion.mp4
 
@@ -237,7 +237,7 @@ ffmpeg -framerate 15 -i artifacts/part/frames/%03d.png -c:v libx264 -crf 18 -pix
 
 轨迹验收比较已知 1 m 风位移的密度与材质坐标，检查局部标记的位移、松手后的历史、密度范围、近似雾量保持、压力残差、暂停、障碍更新、重复坐标刷新和重置确定性。它不把“参数造成像素差”当成交互正确的证据。
 
-扩散验收另行检查中心稀释、波前半径增长、浓度超过基准、总雾量误差、材质标记共同位移、空区二次冲击、30/60 Hz 一致性、暂停重置、隔墙遮挡、重叠上限、开放边界及实际 Space 输入。
+扩散验收另行检查中心稀释、波前半径增长、浓度超过基准、总雾量误差、材质标记共同位移、空区二次冲击、30/60 Hz 一致性、暂停重置、隔墙遮挡、重叠上限、开放边界，以及爆开工具的左键输入与跳跃雾效。
 
 划开验收检查快速线段的连续缺口、两侧堆积、密度积分、材质标记位移、松手历史、墙体遮挡和自然回填，以及交互器、暂停重置、模式按钮、M 键和左键接线。新增 19 项与已有 93 项检查均通过；均匀雾测试的密度积分误差约 0.0005%。预览位于 `artifacts/part/`。
 
