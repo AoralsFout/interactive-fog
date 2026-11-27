@@ -2,7 +2,7 @@
 class_name InteractiveFogField
 extends Node3D
 ## 对场景公开的雾场接口：管理参数、收集交互、驱动 GPU、同步 FogVolume。
-## 本节点的原点是雾层底部中心；雾层固定沿世界 XZ 平面铺开。
+## 本节点的 XZ 是雾场中心；未指定高度图时，Y 是雾层底部。
 ## 场景节点均由 .tscn 提供；本脚本只创建瞬态 GPU 资源和运行时材质副本。
 
 signal textures_changed
@@ -19,6 +19,15 @@ signal settings_replaced
 		_on_settings_changed()
 		if is_inside_tree():
 			settings_replaced.emit()
+## 静态世界空间高度图，必须覆盖整个雾场的 XZ 区域。
+@export var height_map: FogHeightMap:
+	set(value):
+		if height_map != null:
+			height_map.changed.disconnect(_on_settings_changed)
+		height_map = value
+		if height_map != null:
+			height_map.changed.connect(_on_settings_changed)
+		_on_settings_changed()
 ## 编辑器中持续播放模拟。关闭后仍可修改外观，保留当前预览状态。
 @export var preview_in_editor := true
 @export var simulation_enabled := true
@@ -45,6 +54,7 @@ var _expansions := PackedFloat32Array()
 var _warned_obstacle_limit := false
 var _warned_stamp_limit := false
 var _last_global_position := Vector3(INF, INF, INF)
+var _height_map_warning := ""
 
 
 func _ready() -> void:
@@ -80,6 +90,8 @@ func _process(delta: float) -> void:
 	if global_position != _last_global_position:
 		_appearance_dirty = true
 		_last_global_position = global_position
+		update_configuration_warnings()
+		update_gizmos()
 	if _appearance_dirty:
 		_apply_appearance()
 		_appearance_dirty = false
@@ -213,14 +225,20 @@ func _advance_simulation(step: float) -> void:
 		domain.x, domain.y, domain.z, domain.w,
 		settings.wind_velocity.x, settings.wind_velocity.y, settings.turbulence_strength, settings.turbulence_scale,
 		step, _simulation_time, log(2.0) / settings.inflow_half_life, settings.velocity_damping,
-		settings.wind_response, settings.max_speed, 0.0, 0.0,
+		settings.wind_response, settings.max_speed, settings.downslope_strength, settings.max_downslope_speed,
 		float(obstacles.size()) / 8.0, float(stamps.size()) / FogSimulationGPU.STAMP_FLOAT_COUNT,
 		1.0 if reset else 0.0, float(_resolution),
 		settings.density_variation, settings.density_pattern_scale, settings.detail_reset_period, 0.0,
 		settings.vorticity_strength, float(_expansions.size()) / FogSimulationGPU.SHOCK_FLOAT_COUNT, 0.0, settings.max_compressed_density,
 	])
+	var slope_texture: Texture2D
+	var slope_bounds := Rect2()
+	if step > 0.0 and not reset and settings.downslope_strength > 0.0 and height_map != null and _get_height_map_warning().is_empty():
+		slope_texture = height_map.get_height_texture()
+		slope_bounds = height_map.world_bounds
 	_simulation.advance(parameters, stamps, obstacles, rebuild, settings.pressure_iterations, _expansions,
-			settings.multigrid_cycles if settings.pressure_solver == FogSettings.PressureSolver.MULTIGRID else 0)
+			settings.multigrid_cycles if settings.pressure_solver == FogSettings.PressureSolver.MULTIGRID else 0,
+			slope_texture, slope_bounds)
 	_render_material.set_shader_parameter("simulation_time", _simulation_time)
 	_needs_reset = false
 
@@ -271,7 +289,7 @@ func _collect_stamps(step: float) -> PackedFloat32Array:
 		var velocity := Vector2(position_now.x - previous.x, position_now.z - previous.z) / step
 		if not interactor.enabled:
 			continue
-		if interactor.vertical_reach >= 0.0 and absf(position_now.y - global_position.y) > settings.get_volume_height() + interactor.vertical_reach:
+		if not _interactor_reaches_fog(position_now, interactor.vertical_reach):
 			continue
 		if interactor.mode == FogInteractor3D.Mode.PART:
 			var cut_previous: Vector3 = _cut_positions.get(id, position_now)
@@ -298,18 +316,65 @@ func _collect_stamps(step: float) -> PackedFloat32Array:
 	return data
 
 
+func _interactor_reaches_fog(position: Vector3, reach: float) -> bool:
+	if reach < 0.0:
+		return true
+	var thickness := settings.get_volume_height()
+	if height_map == null:
+		return absf(position.y - global_position.y) <= thickness + reach
+	var relative_height := position.y - get_ground_height(position)
+	return relative_height >= -reach and relative_height <= thickness + reach
+
+
+## World-space ground Y, or INF outside a configured height map.
+func get_ground_height(world_position: Vector3) -> float:
+	if height_map == null:
+		return global_position.y
+	return height_map.sample_height(Vector2(world_position.x, world_position.z))
+
+
+## Vertical bounds relative to this node, for the volume and its editor gizmo.
+func get_volume_y_bounds() -> Vector2:
+	var thickness := settings.get_volume_height()
+	if height_map == null or not _get_height_map_warning().is_empty():
+		return Vector2(0.0, thickness)
+	var limits := height_map.get_height_limits(_get_area_bounds())
+	return limits - Vector2.ONE * global_position.y + Vector2(0.0, thickness)
+
+
+func _get_area_bounds() -> Rect2:
+	var center := Vector2(global_position.x, global_position.z)
+	return Rect2(center - settings.area_size * 0.5, settings.area_size)
+
+
+func _get_height_map_warning() -> String:
+	if height_map == null:
+		return ""
+	if not height_map.is_valid():
+		return "雾场高度图需要有效的世界坐标范围、至少 2 × 2 的纹理及有限的高度数据。"
+	if settings != null and not height_map.world_bounds.encloses(_get_area_bounds()):
+		return "高度图必须覆盖整个雾场的 XZ 区域。"
+	return ""
+
+
 func _apply_appearance() -> void:
-	var volume_height := settings.get_volume_height()
-	_volume.position = Vector3(0.0, volume_height * 0.5, 0.0)
-	_volume.size = Vector3(settings.area_size.x, volume_height, settings.area_size.y)
+	var warning := _get_height_map_warning()
+	if warning != _height_map_warning and not warning.is_empty() and not Engine.is_editor_hint():
+		push_warning(warning)
+	_height_map_warning = warning
+	var bounds := get_volume_y_bounds()
+	_volume.position = Vector3(0.0, (bounds.x + bounds.y) * 0.5, 0.0)
+	_volume.size = Vector3(settings.area_size.x, bounds.y - bounds.x, settings.area_size.y)
 	apply_render_parameters(_render_material)
 	appearance_changed.emit()
 
 
 func apply_render_parameters(material: ShaderMaterial) -> void:
+	var valid_height_map := height_map != null and _height_map_warning.is_empty()
 	var values := {
 		"area_size": settings.area_size, "world_origin": global_position,
-		"thickness": settings.thickness, "density": settings.density,
+		"thickness": settings.thickness, "density": settings.density if _height_map_warning.is_empty() else 0.0,
+		"use_height_map": valid_height_map,
 		"fog_albedo": settings.albedo, "fog_emission": settings.emission,
 		"height_falloff": settings.height_falloff, "edge_fade": settings.edge_fade,
 		"obstacle_fade": maxf(settings.obstacle_fade, settings.area_size[settings.area_size.max_axis_index()] / settings.resolution),
@@ -319,6 +384,10 @@ func apply_render_parameters(material: ShaderMaterial) -> void:
 	}
 	for key in values:
 		material.set_shader_parameter(key, values[key])
+	if valid_height_map:
+		var rect := height_map.world_bounds
+		material.set_shader_parameter("height_map_rect", Vector4(rect.position.x, rect.position.y, rect.size.x, rect.size.y))
+		material.set_shader_parameter("height_map_texture", height_map.get_height_texture())
 
 
 func _on_settings_changed() -> void:
@@ -336,4 +405,8 @@ func _get_configuration_warnings() -> PackedStringArray:
 		warnings.append("此 demo 的 FogVolume 渲染需要 Forward+。")
 	if is_inside_tree() and not global_basis.is_equal_approx(Basis.IDENTITY):
 		warnings.append("雾场沿世界 XZ 平面铺开：请保持自身及父节点旋转为零、缩放为一，使用 area_size 调整尺寸。")
+	if is_inside_tree():
+		var warning := _get_height_map_warning()
+		if not warning.is_empty():
+			warnings.append(warning)
 	return warnings

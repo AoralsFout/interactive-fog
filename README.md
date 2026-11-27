@@ -8,6 +8,8 @@ Godot 4.7 / Forward+ 的浅层交互雾。二维流体负责水平运动，主�
 
 打开 `project.godot`，等待 Compute Shader 导入，F5 运行。使用 Forward+，默认 Windows / D3D12；Mobile 和 Compatibility 不支持此处的 FogVolume。
 
+在编辑器打开 `demo/terrain.tscn` 后按 F6，可单独运行缓坡、丘陵和浅沟演示。起伏地形开放 FogVolume 的高画质与性能两档，薄层合成和水平切片仍可在平地演示使用。
+
 | 输入 | 行为 |
 | --- | --- |
 | WASD / 方向键、Shift | 角色移动、加速，沿走过的路径向两侧拨雾 |
@@ -19,6 +21,16 @@ Godot 4.7 / Forward+ 的浅层交互雾。二维流体负责水平运动，主�
 | R / P / Tab | 重置 / 暂停 / 二维场图 |
 
 左侧可调光学密度、**上风边界补雾半衰期**、风速与层高。补雾只在入流边缘发生；场内稀疏区由周围流动填充，不按固定图案重新生成。
+
+### 让雾贴合起伏地形
+
+在 `FogField.height_map` 指定 `FogHeightMap`。给 `source` 选一张至少 2 × 2 的静态高度纹理，建议使用无损灰度图。 `world_bounds` 指定纹理首尾像素中心对应的世界 XZ 范围，图像行向世界 +Z 增长。 `height_range` 把红色通道的 0 和 1 映射到世界 Y 高度，单位为米。高度图需覆盖整个雾场，也可以由多个雾场共享。留空时使用雾场节点的 Y 作为平地高度。
+
+演示的地面网格、碰撞和雾共享同一份高度数据，每个网格四边形沿左上至右下切成两个三角形。接入已有地形时，让雾和地面使用一致的坐标、采样点和三角划分。模拟仍在二维 XZ 网格上进行。
+
+地形演示启用了顺坡搬运。可在 `FogField → Settings → 顺坡搬运` 调节 `Downslope Strength` 和 `Max Downslope Speed`。前者把每单位坡度换算为速度，后者限制网格面上的顺坡速度。新建设置默认强度为 0。
+
+顺坡通量在普通流动和交互搬运后更新，密度与材质细节一起向低处移动。下游密度高过上游时，顺坡通量逐渐减弱，接近密度上限时只限制流入量。顺坡分量在固体和雾场边界处封闭，背景风仍按原有开放边界输运。
 
 ## 结构
 
@@ -208,6 +220,8 @@ godot --path . --fixed-fps 60 --script res://tests/flow_transport.gd
 godot --path . --fixed-fps 60 --script res://tests/flow_expansion.gd
 godot --path . --fixed-fps 60 --script res://tests/flow_part.gd
 godot --path . --script res://tests/gpu_smoke.gd
+godot --path . --fixed-fps 60 --script res://tests/terrain_fog.gd
+godot --path . --fixed-fps 60 --script res://tests/slope_transport.gd
 godot --path . --fixed-fps 60 --script res://tests/field_map.gd
 godot --path . --fixed-fps 60 --script res://tests/fog_detail.gd
 godot --editor --path . -- --fog-editor-smoke

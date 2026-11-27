@@ -11,6 +11,7 @@ const MAX_BURSTS := 4
 const MAX_CUT_SEGMENTS := 16
 const SHOCK_FLOAT_COUNT := 8
 const MAX_SHOCK_SUBSTEPS := 64
+const MAX_SLOPE_SUBSTEPS := 8
 const PARAMETER_BYTES := 7 * 16
 const SHADERS := {
 	"obstacles": preload("res://fog/shaders/build_obstacles.glsl"),
@@ -26,6 +27,7 @@ const SHADERS := {
 	"project": preload("res://fog/shaders/project_velocity.glsl"),
 	"predict": preload("res://fog/shaders/density_predict.glsl"),
 	"transport": preload("res://fog/shaders/simulate.glsl"),
+	"slope_transport": preload("res://fog/shaders/slope_transport.glsl"),
 	"shock_field": preload("res://fog/shaders/shock_field.glsl"),
 	"shock_seed": preload("res://fog/shaders/shock_seed.glsl"),
 	"shock_transport": preload("res://fog/shaders/shock_transport.glsl"),
@@ -82,6 +84,8 @@ var _backtrace_uv := RID()
 var _read := 0
 var _pressure_read := 0
 var _pressure_sets: Array[RID] = []
+var _slope_texture: Texture2D
+var _slope_sets: Array[RID] = []
 var _topology: RID
 var _levels: Array[PressureLevel] = []
 var _mg_geometry_dirty := true
@@ -94,9 +98,10 @@ func start(resolution: int, density_resolution: int) -> void:
 
 func advance(parameters: PackedFloat32Array, stamps: PackedFloat32Array,
 		obstacles: PackedFloat32Array, rebuild: bool, iterations: int, shocks: PackedFloat32Array,
-		multigrid_cycles := 0) -> void:
+		multigrid_cycles := 0, slope_texture: Texture2D = null, slope_bounds := Rect2()) -> void:
 	RenderingServer.call_on_render_thread(_advance.bind(
-		parameters.to_byte_array(), stamps.to_byte_array(), obstacles.to_byte_array() if rebuild else PackedByteArray(), rebuild, iterations, shocks.to_byte_array(), multigrid_cycles))
+		parameters.to_byte_array(), stamps.to_byte_array(), obstacles.to_byte_array() if rebuild else PackedByteArray(),
+		rebuild, iterations, shocks.to_byte_array(), multigrid_cycles, slope_texture, slope_bounds))
 
 
 func shutdown() -> void:
@@ -311,7 +316,7 @@ func _v_cycle(list: int, depth: int, read: int) -> int:
 
 func _advance(parameters: PackedByteArray, stamps: PackedByteArray,
 		obstacles: PackedByteArray, rebuild: bool, iterations: int, shocks: PackedByteArray,
-		multigrid_cycles := 0) -> void:
+		multigrid_cycles: int, slope_texture: Texture2D, slope_bounds: Rect2) -> void:
 	if not _ready_on_gpu:
 		return
 	var dt := parameters.decode_float(32)
@@ -329,6 +334,8 @@ func _advance(parameters: PackedByteArray, stamps: PackedByteArray,
 			_rd.texture_clear(diagnostic, Color(0, 0, 0, 0), 0, 1, 0, 1)
 	if multigrid_cycles > 0 and _levels.is_empty():
 		_init_multigrid()
+	var transport_slope := slope_texture != null and _bind_slope_texture(slope_texture)
+	var area := Vector2(parameters.decode_float(0), parameters.decode_float(4))
 	var list := _rd.compute_list_begin()
 	if rebuild:
 		_dispatch(list, "obstacles", _sets["obstacles"], _density_resolution)
@@ -358,13 +365,56 @@ func _advance(parameters: PackedByteArray, stamps: PackedByteArray,
 	_dispatch(list, "transport", _sets["transport%d" % _read], _density_resolution)
 	_read = 1 - _read
 	if not shocks.is_empty() and dt > 0.0:
-		var area := Vector2(parameters.decode_float(0), parameters.decode_float(4))
 		var center := Vector2(parameters.decode_float(8), parameters.decode_float(12))
 		var cell := minf(area.x, area.y) / _density_resolution
 		for region in _shock_regions(shocks, area, center, cell):
 			_transport_region(list, region, dt, cell)
+	if transport_slope:
+		_transport_slope(list, dt, area / _density_resolution, parameters.decode_float(60), slope_bounds)
 	_rd.compute_list_end()
 	coordinate_texture.texture_rd_rid = _coordinates[_read]
+
+
+func _bind_slope_texture(texture: Texture2D) -> bool:
+	if texture == _slope_texture and _slope_sets.size() == 2:
+		return true
+	_release_slope_sets()
+	var height_rid := RenderingServer.texture_get_rd_texture(texture.get_rid())
+	if not height_rid.is_valid():
+		return false
+	for index in range(2):
+		var uniforms := _common(_velocity)
+		uniforms.append_array([
+			_sample(3, height_rid), _sample(4, _states[index]), _sample(5, _coordinates[index]),
+			_image(6, _states[1 - index]), _image(7, _coordinates[1 - index]), _image(8, _display)])
+		var uniform_set := _rd.uniform_set_create(uniforms, _shaders["slope_transport"], 0)
+		if not uniform_set.is_valid():
+			_release_slope_sets()
+			return false
+		_slope_sets.append(uniform_set)
+	_slope_texture = texture
+	return true
+
+
+func _release_slope_sets() -> void:
+	for uniform_set in _slope_sets:
+		if _rd.uniform_set_is_valid(uniform_set):
+			_rd.free_rid(uniform_set)
+	_slope_sets.clear()
+	_slope_texture = null
+
+
+func _transport_slope(list: int, dt: float, cell: Vector2, max_speed: float, bounds: Rect2) -> void:
+	# Bound the sum of outgoing Courant numbers even when all four faces drain.
+	var desired := maxi(1, ceili(2.0 * dt * max_speed * (1.0 / cell.x + 1.0 / cell.y) / 0.8))
+	var steps := mini(desired, MAX_SLOPE_SUBSTEPS)
+	var push := PackedFloat32Array([
+		bounds.position.x, bounds.position.y, bounds.size.x, bounds.size.y,
+		dt / steps, max_speed * float(steps) / desired, 0.0]).to_byte_array()
+	for index in range(steps):
+		push.encode_float(24, float(index == steps - 1))
+		_dispatch(list, "slope_transport", _slope_sets[_read], _density_resolution, push)
+		_read = 1 - _read
 
 
 func _shock_regions(shocks: PackedByteArray, area: Vector2, center: Vector2, cell: float) -> Array[ShockRegion]:
@@ -438,6 +488,7 @@ func _release() -> void:
 	_ready_on_gpu = false
 	for wrapper in [state_texture, obstacle_texture, coordinate_texture, diagnostics_texture]:
 		wrapper.texture_rd_rid = RID()
+	_release_slope_sets()
 	_resources.reverse()
 	for rid in _resources:
 		if rid.is_valid():

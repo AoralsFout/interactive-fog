@@ -1,0 +1,13 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://uii7pgak188a"
+path="res://.godot/imported/slope_transport.glsl-643fe6aef168ad980605617ddde96934.res"
+
+[deps]
+
+source_file="res://fog/shaders/slope_transport.glsl"
+dest_files=["res://.godot/imported/slope_transport.glsl-643fe6aef168ad980605617ddde96934.res"]
+
+[params]

@@ -2,7 +2,10 @@ uniform sampler2D state_texture : filter_linear, repeat_disable;
 uniform sampler2D obstacle_texture : filter_linear, repeat_disable;
 uniform sampler2D coordinate_texture : filter_linear, repeat_disable;
 uniform sampler3D detail_texture : filter_linear, repeat_enable;
+uniform sampler2D height_map_texture : filter_nearest, repeat_disable;
 uniform bool use_simulation = false;
+uniform bool use_height_map = false;
+uniform vec4 height_map_rect;
 uniform vec2 area_size = vec2(24.0,20.0);
 uniform vec3 world_origin = vec3(0.0);
 uniform float thickness = 0.85;
@@ -25,8 +28,28 @@ float volume_detail(vec2 material_position,float height) {
 	return texture(detail_texture,q+vec3(bend,0.0,-bend)*detail_warp*0.4).r;
 }
 
+float ground_height(vec2 world_xz) {
+	// The mesh and CPU sampler use the same 00–11 diagonal in each quad.
+	ivec2 last=textureSize(height_map_texture,0)-ivec2(1);
+	vec2 grid=clamp((world_xz-height_map_rect.xy)/height_map_rect.zw,vec2(0.0),vec2(1.0))*vec2(last);
+	ivec2 cell=min(ivec2(grid),last-ivec2(1));
+	vec2 f=grid-vec2(cell);
+	float h00=texelFetch(height_map_texture,cell,0).r;
+	float h11=texelFetch(height_map_texture,cell+ivec2(1),0).r;
+	if(f.x>=f.y) {
+		float h10=texelFetch(height_map_texture,cell+ivec2(1,0),0).r;
+		return h00+(h10-h00)*f.x+(h11-h10)*f.y;
+	}
+	float h01=texelFetch(height_map_texture,cell+ivec2(0,1),0).r;
+	return h00+(h11-h01)*f.x+(h01-h00)*f.y;
+}
+
 float fog_extinction(vec3 position) {
 	vec3 local=position-world_origin;
+	if(use_height_map) {
+		local.y=position.y-ground_height(position.xz);
+		if(local.y<0.0 || local.y>thickness) { return 0.0; }
+	}
 	vec2 uv=local.xz/area_size+vec2(0.5);
 	vec2 border=(vec2(0.5)-abs(uv-vec2(0.5)))*area_size;
 	float boundary=smoothstep(0.0,edge_fade,min(border.x,border.y));

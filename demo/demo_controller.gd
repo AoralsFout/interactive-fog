@@ -10,6 +10,7 @@ enum BrushMode { STIR, PART, BURST }
 			return
 		brush_mode = next
 		_painting = false
+		_terrain_clicks.clear()
 		if is_instance_valid(_brush_interactor):
 			_brush_interactor.enabled = false
 		if is_node_ready():
@@ -18,6 +19,7 @@ enum BrushMode { STIR, PART, BURST }
 @export_node_path("Camera3D") var camera_path := NodePath("CameraRig/Camera3D")
 @export_node_path("Node3D") var brush_path := NodePath("MouseBrush")
 @export_node_path("Node3D") var player_path := NodePath("Player")
+@export_flags_3d_physics var terrain_brush_mask := 2
 @export_group("鼠标推雾")
 @export_range(0.2, 5.0, 0.1, "suffix:m") var brush_radius := 1.4:
 	set(value):
@@ -64,6 +66,7 @@ enum BrushMode { STIR, PART, BURST }
 
 var _painting := false
 var _valid_brush := false
+var _terrain_clicks: Array[Vector2] = []
 var _cursor_material: StandardMaterial3D
 var _custom_fog_active := false
 var _previous_native_fog := true
@@ -78,6 +81,9 @@ func _ready() -> void:
 	brush_mode_changed.connect(_hud.set_brush_mode)
 	_player.jumped.connect(_gather_at_takeoff)
 	_player.landed.connect(_spread_at_landing)
+	if _field.height_map != null:
+		var foot_interactor := _player.get_node("FogInteractor") as FogInteractor3D
+		foot_interactor.vertical_reach = 0.1
 	_sync_brush_mode()
 
 
@@ -122,14 +128,31 @@ func _sync_brush_shape() -> void:
 
 
 func _gather_at_takeoff(foot_position: Vector3) -> void:
-	_field.gather(foot_position, 1.0)
+	if _touches_ground(foot_position):
+		_field.gather(foot_position, 1.0)
 
 
 func _spread_at_landing(foot_position: Vector3) -> void:
-	_field.burst(foot_position, 1.45, 0.32, 0.55, 0.0, 0.3)
+	if _touches_ground(foot_position):
+		_field.burst(foot_position, 1.45, 0.32, 0.55, 0.0, 0.3)
+
+
+func _touches_ground(foot_position: Vector3) -> bool:
+	return _field.height_map == null or absf(foot_position.y - _field.get_ground_height(foot_position)) <= 0.35
 
 
 func _process(_delta: float) -> void:
+	if _field.height_map == null:
+		_update_brush()
+
+
+func _physics_process(_delta: float) -> void:
+	if _field.height_map == null:
+		return
+	for mouse in _terrain_clicks:
+		_update_brush_position(mouse)
+		_apply_brush_click()
+	_terrain_clicks.clear()
 	_update_brush()
 
 
@@ -149,14 +172,38 @@ func _update_brush() -> void:
 func _update_brush_position(mouse: Vector2) -> void:
 	var ray_origin := _camera.project_ray_origin(mouse)
 	var ray_direction := _camera.project_ray_normal(mouse)
-	var ground_plane := Plane(Vector3.UP, _field.global_position.y)
-	var hit: Variant = ground_plane.intersects_ray(ray_origin, ray_direction)
+	var hit: Variant
+	var normal := Vector3.UP
+	if _field.height_map != null:
+		var query := PhysicsRayQueryParameters3D.create(ray_origin, ray_origin + ray_direction * _camera.far, terrain_brush_mask)
+		var result := get_world_3d().direct_space_state.intersect_ray(query)
+		hit = result.get("position")
+		normal = result.get("normal", Vector3.UP)
+	else:
+		var ground_plane := Plane(Vector3.UP, _field.global_position.y)
+		hit = ground_plane.intersects_ray(ray_origin, ray_direction)
 	_valid_brush = hit != null
 	if _valid_brush:
 		var point: Vector3 = hit
 		var local := point - _field.global_position
 		_valid_brush = absf(local.x) < _field.settings.area_size.x * 0.5 and absf(local.z) < _field.settings.area_size.y * 0.5
 		_brush.global_position = point + Vector3.UP * 0.045
+		if _field.height_map != null:
+			_brush.global_basis = Basis(Quaternion(Vector3.UP, normal))
+
+
+func _apply_brush_click() -> void:
+	_painting = _valid_brush and brush_mode != BrushMode.BURST
+	if not _valid_brush:
+		return
+	var center := _brush.global_position
+	match brush_mode:
+		BrushMode.STIR:
+			_field.disturb(center, brush_radius, Vector2.ZERO, brush_click_swirl)
+		BrushMode.PART:
+			_field.part(center, center, part_radius, part_speed, part_duration)
+		BrushMode.BURST:
+			_field.burst(center, burst_radius, burst_duration, burst_strength, burst_swirl, burst_rim_width)
 
 
 func _input(event: InputEvent) -> void:
@@ -167,19 +214,14 @@ func _input(event: InputEvent) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if event.pressed:
+		if not event.pressed:
+			_painting = false
+		elif _field.height_map != null:
+			# Physics space queries belong to the following physics tick.
+			_terrain_clicks.append(event.position)
+		else:
 			_update_brush_position(event.position)
-		_painting = event.pressed and _valid_brush and brush_mode != BrushMode.BURST
-		if not event.pressed or not _valid_brush:
-			return
-		var center := _brush.global_position
-		match brush_mode:
-			BrushMode.STIR:
-				_field.disturb(center, brush_radius, Vector2.ZERO, brush_click_swirl)
-			BrushMode.PART:
-				_field.part(center, center, part_radius, part_speed, part_duration)
-			BrushMode.BURST:
-				_field.burst(center, burst_radius, burst_duration, burst_strength, burst_swirl, burst_rim_width)
+			_apply_brush_click()
 	elif event.is_action_pressed("fog_tool_toggle"):
 		brush_mode = (brush_mode + 1) % BrushMode.size()
 	elif event.is_action_pressed("fog_reset"):

@@ -54,6 +54,8 @@ var _project_grid := fog_grid
 
 
 func set_fog_quality(index: int) -> void:
+	if %FogQuality.is_item_disabled(index):
+		return
 	fog_grid = PERFORMANCE_GRID if index == FogQuality.PERFORMANCE else _project_grid
 	RenderingServer.environment_set_volumetric_fog_volume_size(fog_grid.x, fog_grid.y)
 	%FogQuality.select(index)
@@ -68,6 +70,8 @@ func _exit_tree() -> void:
 
 func _ready() -> void:
 	%FogQuality.item_selected.connect(set_fog_quality)
+	_field.appearance_changed.connect(_sync_fog_quality_choices)
+	_sync_fog_quality_choices()
 	%StirButton.pressed.connect(_select_brush_mode.bind(0))
 	%PartButton.pressed.connect(_select_brush_mode.bind(1))
 	%BurstButton.pressed.connect(_select_brush_mode.bind(2))
@@ -88,6 +92,18 @@ func _ready() -> void:
 	_set_debug_mode(%DebugMode.selected)
 	get_viewport().size_changed.connect(_layout_help)
 	_layout_help()
+
+
+func _sync_fog_quality_choices() -> void:
+	var quality: OptionButton = %FogQuality
+	var terrain := _field.height_map != null
+	var hint := "Thin layer and horizontal slices are available on flat ground only." if terrain else ""
+	for index in [FogQuality.THIN_LAYER, FogQuality.HORIZONTAL_SLICES]:
+		quality.set_item_disabled(index, terrain)
+		quality.get_popup().set_item_tooltip(index, hint)
+	quality.tooltip_text = hint if terrain else "Fog rendering method and quality"
+	if terrain and quality.is_item_disabled(quality.selected):
+		set_fog_quality(FogQuality.HIGH)
 
 
 func _process(delta: float) -> void:

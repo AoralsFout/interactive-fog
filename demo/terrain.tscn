@@ -1,0 +1,66 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://demo/main.tscn" id="1_demo"]
+[ext_resource type="Script" path="res://fog/fog_height_map.gd" id="2_map"]
+[ext_resource type="Texture2D" path="res://demo/terrain_height.png" id="3_height"]
+[ext_resource type="Script" path="res://demo/height_map_ground.gd" id="4_ground"]
+[ext_resource type="Shader" path="res://demo/shaders/ground.gdshader" id="5_grid"]
+[ext_resource type="Script" path="res://fog/fog_settings.gd" id="6_settings"]
+
+[sub_resource type="Resource" id="Resource_height_map"]
+script = ExtResource("2_map")
+source = ExtResource("3_height")
+world_bounds = Rect2(-13, -11, 26, 22)
+height_range = Vector2(-1.2, 2.4)
+
+[sub_resource type="ShaderMaterial" id="Material_terrain"]
+shader = ExtResource("5_grid")
+shader_parameter/ground_color = Color(0.055, 0.08, 0.105, 1)
+shader_parameter/grid_color = Color(0.12, 0.19, 0.22, 1)
+
+[sub_resource type="Resource" id="Resource_terrain_fog"]
+resource_local_to_scene = true
+script = ExtResource("6_settings")
+downslope_strength = 0.45
+pressure_solver = 1
+density = 5.0
+albedo = Color(1, 1, 1, 1)
+obstacle_fade = 0.02
+
+[node name="TerrainFogDemo" instance=ExtResource("1_demo")]
+terrain_brush_mask = 2
+
+[node name="Ground" parent="." index="2"]
+visible = false
+
+[node name="CollisionShape3D" parent="Ground" index="2"]
+disabled = true
+
+[node name="PillarWest" parent="Obstacles" index="0"]
+position = Vector3(-4, 1.12, -1.5)
+
+[node name="PillarNorth" parent="Obstacles" index="1"]
+position = Vector3(0, 0.03, -4)
+
+[node name="PillarEast" parent="Obstacles" index="2"]
+position = Vector3(4.7, 0.24, 1.4)
+
+[node name="WallEast" parent="Obstacles" index="4"]
+position = Vector3(4, 0.1, -3.7)
+
+[node name="CoolOmni" parent="Lighting" index="1"]
+position = Vector3(5.5, 2.46, 3.2)
+
+[node name="Player" parent="." index="6"]
+position = Vector3(0, -0.42, 4)
+floor_snap_length = 0.35
+
+[node name="FogField" parent="." index="8"]
+settings = SubResource("Resource_terrain_fog")
+height_map = SubResource("Resource_height_map")
+
+[node name="Terrain" type="StaticBody3D" parent="." index="11"]
+collision_layer = 3
+script = ExtResource("4_ground")
+height_map = SubResource("Resource_height_map")
+ground_material = SubResource("Material_terrain")

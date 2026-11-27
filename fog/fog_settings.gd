@@ -68,6 +68,18 @@ extends Resource
 		density_pattern_scale = maxf(value, 0.1)
 		emit_changed()
 
+@export_group("顺坡搬运")
+## 每单位坡度对应的下坡速度。0 关闭此效果，需要配置 FogHeightMap。
+@export_range(0.0, 2.0, 0.01, "suffix:m/s") var downslope_strength := 0.0:
+	set(value):
+		downslope_strength = clampf(value, 0.0, 2.0)
+		emit_changed()
+## 网格面法向的最大顺坡速度。
+@export_range(0.05, 1.0, 0.01, "suffix:m/s") var max_downslope_speed := 0.25:
+	set(value):
+		max_downslope_speed = clampf(value, 0.05, 1.0)
+		emit_changed()
+
 @export_group("流体求解")
 enum PressureSolver { JACOBI, MULTIGRID }
 ## Jacobi 档保留已有预设的迭代次数。
@@ -161,6 +173,6 @@ enum PressureSolver { JACOBI, MULTIGRID }
 func get_volume_height() -> float:
 	return thickness
 
-## 密度和材质坐标比速度场更细，但所有搬运共享同一投影后的速度。
+## 密度和材质坐标共用更细的输运网格。
 func get_density_resolution() -> int:
 	return resolution * 2
