@@ -2,6 +2,8 @@ extends Node
 ## Demo adapter for a single field, camera and the three lights in main.tscn.
 
 const Effect = preload("res://fog/thin_fog_effect.gd")
+const MAX_SHADOW_CASTERS := FogSimulationGPU.MAX_OBSTACLES
+const CASTER_VECTORS := 4
 @onready var field: InteractiveFogField = $"../FogField"
 @onready var world: WorldEnvironment = $"../WorldEnvironment"
 @onready var camera: Camera3D = $"../CameraRig/Camera3D"
@@ -57,9 +59,13 @@ func _process(_delta: float) -> void:
 	var tile_texture := terrain.get_tile_height_texture() if terrain != null else null
 	var density := s.density if field.height_map == null or terrain != null else 0.0
 	var half_height := volume.size.y * 0.5
-	var ambient := env.ambient_light_color.srgb_to_linear() * env.ambient_light_energy * env.volumetric_fog_ambient_inject
+	# With no sky resource, the native fog blends the ambient color with black.
+	var ambient_strength := env.ambient_light_energy * env.volumetric_fog_ambient_inject * (1.0 - env.ambient_light_sky_contribution)
+	var ambient := env.ambient_light_color.srgb_to_linear() * ambient_strength
 	var albedo := s.albedo.srgb_to_linear()
 	var emission := s.emission.srgb_to_linear()
+	var casters := _collect_shadow_casters()
+	var caster_count := float(casters.size()) / CASTER_VECTORS
 	var vectors: Array[Vector4] = [
 		Vector4(origin.x, origin.y, origin.z, s.thickness),
 		Vector4(s.area_size.x, s.area_size.y, density, s.height_falloff),
@@ -68,17 +74,20 @@ func _process(_delta: float) -> void:
 		Vector4(albedo.r, albedo.g, albedo.b, 0),
 		Vector4(emission.r, emission.g, emission.b, 0),
 		Vector4(ambient.r, ambient.g, ambient.b, 0),
-		_vec(sun.global_basis.z.normalized(), float(sun.shadow_enabled)), _light(sun),
+		_vec(sun.global_basis.z.normalized(), 0.0), _light(sun),
 		_vec(warm.global_position, warm.spot_range), _light(warm),
 		_vec(-warm.global_basis.z.normalized(), cos(deg_to_rad(warm.spot_angle))),
 		_vec(cool.global_position, cool.omni_range), _light(cool),
 		Vector4(warm.spot_attenuation, cool.omni_attenuation, warm.spot_angle_attenuation, 0),
 		Vector4(bounds.position.x, bounds.position.y, bounds.size.x, bounds.size.y),
-		Vector4(volume.global_position.y - half_height, volume.global_position.y + half_height, float(terrain != null), 0.0),
+		Vector4(volume.global_position.y - half_height, volume.global_position.y + half_height, float(terrain != null), caster_count),
 	]
-	var params := PackedVector4Array(vectors).to_byte_array()
+	# Keep the uniform buffer at the shader's declared size as casters come and go.
+	casters.resize(MAX_SHADOW_CASTERS * CASTER_VECTORS)
+	var params := PackedVector4Array(vectors)
+	params.append_array(casters)
 	var detail: Texture3D = volume.material.get_shader_parameter("detail_texture")
-	RenderingServer.call_on_render_thread(effect.set_field.bind(params, field.get_state_texture(),
+	RenderingServer.call_on_render_thread(effect.set_field.bind(params.to_byte_array(), field.get_state_texture(),
 			field.get_obstacle_texture(), field.get_coordinate_texture(), detail, height_texture, tile_texture))
 
 
@@ -90,4 +99,18 @@ func _light(node: Light3D) -> Vector4:
 	var color := node.light_color.srgb_to_linear() * node.light_energy * node.light_volumetric_fog_energy
 	if not node.is_visible_in_tree():
 		color = Color.BLACK
-	return Vector4(color.r, color.g, color.b, float(node.shadow_enabled))
+	var shadow := node.shadow_opacity if node.shadow_enabled else 0.0
+	return Vector4(color.r, color.g, color.b, shadow)
+
+
+func _collect_shadow_casters() -> PackedVector4Array:
+	var casters := PackedVector4Array()
+	var fog_world := field.get_world_3d()
+	for node in get_tree().get_nodes_in_group(&"interactive_fog_obstacles"):
+		var obstacle := node as FogObstacle3D
+		if obstacle == null or obstacle.get_world_3d() != fog_world:
+			continue
+		casters.append_array(obstacle.pack_shadow_caster())
+		if casters.size() == MAX_SHADOW_CASTERS * CASTER_VECTORS:
+			break
+	return casters

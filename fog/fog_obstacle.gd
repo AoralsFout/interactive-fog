@@ -3,7 +3,7 @@ class_name FogObstacle3D
 extends Node3D
 ## 雾的二维碰撞足迹，独立于物理碰撞体。子节点 Mesh/CollisionShape 仍在 .tscn 中编辑。
 ## 足迹、变换及成员变化时通知雾场重新收集，再按数据变化更新 GPU 距离场。
-## 支持世界 Y 轴旋转和 XZ 缩放。高度不参与计算，适用于贯穿贴地雾层的物体。
+## 模拟足迹支持世界 Y 轴旋转和 XZ 缩放，不使用高度。
 
 enum Shape { BOX, CIRCLE }
 
@@ -124,4 +124,45 @@ func pack_gpu_data() -> PackedFloat32Array:
 	return PackedFloat32Array([
 		global_position.x, global_position.z, extent.x, extent.y,
 		axis.x, axis.y, float(shape), padding,
+	])
+
+
+## 薄层阴影使用网格的局部尺寸和世界变换。自定义模型可以用自身的雾障碍形状近似遮挡。
+func pack_shadow_caster() -> PackedVector4Array:
+	var mesh_node := get_node_or_null("Mesh") as MeshInstance3D
+	if not is_visible_in_tree():
+		return PackedVector4Array()
+	if mesh_node != null and (not mesh_node.is_visible_in_tree()
+			or mesh_node.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF):
+		return PackedVector4Array()
+
+	var half_height := height * 0.5
+	var extents := Vector3(box_size.x * 0.5, half_height, box_size.y * 0.5)
+	var caster_transform := global_transform.translated_local(Vector3(0.0, half_height, 0.0))
+	var caster_shape := shape
+	if caster_shape == Shape.CIRCLE:
+		extents = Vector3(radius, half_height, radius)
+	if mesh_node != null and mesh_node.mesh is BoxMesh:
+		extents = (mesh_node.mesh as BoxMesh).size * 0.5
+		caster_transform = mesh_node.global_transform
+		caster_shape = Shape.BOX
+	elif mesh_node != null and mesh_node.mesh is CylinderMesh:
+		var cylinder := mesh_node.mesh as CylinderMesh
+		if is_equal_approx(cylinder.top_radius, cylinder.bottom_radius):
+			extents = Vector3(cylinder.top_radius, cylinder.height * 0.5, cylinder.top_radius)
+			caster_transform = mesh_node.global_transform
+			caster_shape = Shape.CIRCLE
+	if minf(extents.x, minf(extents.y, extents.z)) <= 0.0 or is_zero_approx(caster_transform.basis.determinant()):
+		return PackedVector4Array()
+
+	var world_to_caster := caster_transform.affine_inverse()
+	var x := world_to_caster.basis.x
+	var y := world_to_caster.basis.y
+	var z := world_to_caster.basis.z
+	var offset := world_to_caster.origin
+	return PackedVector4Array([
+		Vector4(x.x, y.x, z.x, offset.x),
+		Vector4(x.y, y.y, z.y, offset.y),
+		Vector4(x.z, y.z, z.z, offset.z),
+		Vector4(extents.x, extents.y, extents.z, float(caster_shape)),
 	])

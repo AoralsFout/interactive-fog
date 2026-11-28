@@ -7,11 +7,16 @@ layout(binding=2) uniform sampler2D obstacle_map;
 layout(binding=3) uniform sampler2D coordinate_map;
 layout(binding=4) uniform sampler3D detail_map;
 layout(rgba16f, binding=5) writeonly uniform image2D scatter;
+struct ShadowCaster {
+	vec4 world_to_local_x, world_to_local_y, world_to_local_z;
+	vec4 half_extents_shape;
+};
 layout(std140, binding=6) uniform Field {
 	vec4 origin_height, area_density_falloff, fades_scale_amount, sharp_warp_time_phase;
 	vec4 albedo, emission, ambient, sun_dir, sunlight;
 	vec4 spot_pos, spotlight, cone, omni_pos, omnilight, attenuation;
 	vec4 terrain_rect, terrain_limits;
+	ShadowCaster casters[32]; // FogSimulationGPU.MAX_OBSTACLES
 } f;
 layout(binding=7) uniform sampler2D terrain_height;
 layout(binding=8) uniform sampler2D terrain_tiles;
@@ -149,25 +154,53 @@ bool terrain_blocks_light(vec3 p, vec3 dir, float reach) {
 	return false;
 }
 
-// A bounded footprint trace approximates shadows in the shallow layer. The
-// simulation SDF has no occluder heights; the demo uses one representative height.
+const float SHADOW_BIAS = 0.12;
+
+float caster_visibility(ShadowCaster caster, vec3 p, vec3 to_light, float reach) {
+	vec3 extent = caster.half_extents_shape.xyz;
+	vec4 position = vec4(p,1.0), direction = vec4(to_light,0.0);
+	// Transform the ray into mesh space without renormalizing. The interval
+	// parameters still measure world-space distance from the fog sample.
+	float enter = SHADOW_BIAS, leave = reach;
+	if (!clip_slab(dot(caster.world_to_local_y,position),dot(caster.world_to_local_y,direction),
+			vec2(-extent.y,extent.y),enter,leave)) return 1.0;
+	vec2 base = vec2(dot(caster.world_to_local_x,position),dot(caster.world_to_local_z,position));
+	vec2 ray = vec2(dot(caster.world_to_local_x,direction),dot(caster.world_to_local_z,direction));
+	float coverage = 1.0;
+	if (caster.half_extents_shape.w>0.5) {
+		float a = dot(ray,ray);
+		float b = dot(base,ray);
+		float c = dot(base,base)-extent.x*extent.x;
+		if (a<1e-14) {
+			if (c>=0.0) return 1.0;
+		} else {
+			float discriminant = b*b-a*c;
+			if (discriminant<=0.0) return 1.0;
+			float root = sqrt(discriminant);
+			enter = max(enter,(-b-root)/a);
+			leave = min(leave,(-b+root)/a);
+			if (leave<=enter) return 1.0;
+		}
+		float closest = a<1e-14 ? enter : clamp(-b/a,enter,leave);
+		coverage = smoothstep(0.0,min(0.12,extent.x),extent.x-length(base+ray*closest));
+	} else {
+		if (!clip_slab(base.x,ray.x,vec2(-extent.x,extent.x),enter,leave) ||
+				!clip_slab(base.y,ray.y,vec2(-extent.z,extent.z),enter,leave)) return 1.0;
+		vec2 inset = extent.xz-abs(base+ray*(0.5*(enter+leave)));
+		coverage = smoothstep(0.0,min(0.12,min(extent.x,extent.z)),min(inset.x,inset.y));
+	}
+	// The far intersection faces the light. A thin chord fades out at the silhouette.
+	float depth = leave-SHADOW_BIAS;
+	return mix(1.0,exp(-1.35*depth),coverage*smoothstep(0.0,0.30,leave-enter));
+}
+
 float visibility(vec3 p, vec3 to_light, float reach) {
 	if (has_terrain() && terrain_blocks_light(p,to_light,reach)) return 0.0;
-	float t = 0.12;
-	for (int i=0; i<7; ++i) {
-		vec3 q = p + t*to_light;
-		if (t>=reach) break;
-		vec2 uv = uv_at(q);
-		float y = q.y-f.origin_height.y;
-		if (has_terrain()) {
-			if (any(lessThan(uv,vec2(0.0))) || any(greaterThan(uv,vec2(1.0)))) break;
-			y = q.y-ground_height(q.xz);
-		} else if (y>2.15) break;
-		float distance_to_solid = textureLod(obstacle_map,uv,0).r;
-		if (y<=2.15 && distance_to_solid<0.04) return smoothstep(-0.08,0.04,distance_to_solid);
-		t += max(0.08, distance_to_solid);
+	float visible = 1.0;
+	for (int i=0; i<int(f.terrain_limits.w); ++i) {
+		visible = min(visible,caster_visibility(f.casters[i],p,to_light,reach));
 	}
-	return 1;
+	return visible;
 }
 
 float phase(vec3 dir, vec3 ray) {
@@ -186,12 +219,12 @@ vec3 local_light(vec3 p, vec3 ray, vec4 pos, vec4 energy, float falloff, bool is
 		weight *= 1-pow(rim,1/max(0.001,f.attenuation.z));
 	}
 	if (weight <= 0) return vec3(0);
-	if (energy.w>0) weight *= visibility(p,dir,d);
+	if (energy.w>0) weight *= mix(1.0,visibility(p,dir,d),energy.w);
 	return energy.rgb * (3.14159*weight*phase(dir,ray));
 }
 
 vec3 direct_light(vec3 p, vec3 ray, vec3 sun) {
-	vec3 light = sun * (f.sun_dir.w>0 ? visibility(p,f.sun_dir.xyz,50) : 1);
+	vec3 light = sun * (f.sunlight.w>0 ? mix(1.0,visibility(p,f.sun_dir.xyz,50),f.sunlight.w) : 1.0);
 	light += local_light(p,ray,f.spot_pos,f.spotlight,f.attenuation.x,true);
 	light += local_light(p,ray,f.omni_pos,f.omnilight,f.attenuation.y,false);
 	return light;
