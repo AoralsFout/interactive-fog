@@ -15,6 +15,8 @@ var state: Texture2DRD
 var obstacle: Texture2DRD
 var coordinates: Texture2DRD
 var noise: Texture3D
+var height_map: Texture2D
+var terrain_tiles: Texture2D
 
 
 func _init() -> void:
@@ -24,12 +26,14 @@ func _init() -> void:
 
 
 func set_field(data: PackedByteArray, density: Texture2DRD, mask: Texture2DRD,
-		coords: Texture2DRD, detail: Texture3D) -> void:
+		coords: Texture2DRD, detail: Texture3D, terrain: Texture2D, tiles: Texture2D) -> void:
 	field_data = data
 	state = density
 	obstacle = mask
 	coordinates = coords
 	noise = detail
+	height_map = terrain
+	terrain_tiles = tiles
 
 
 func _setup() -> void:
@@ -64,6 +68,14 @@ func _render_callback(_stage: int, render_data: RenderData) -> void:
 	var detail := RenderingServer.texture_get_rd_texture(noise.get_rid())
 	if not detail.is_valid():
 		return
+	# Bind existing resources in flat mode. The flat shader branch never samples them.
+	var height_rid := state.texture_rd_rid
+	var tiles_rid := height_rid
+	if height_map != null:
+		height_rid = RenderingServer.texture_get_rd_texture(height_map.get_rid())
+		tiles_rid = RenderingServer.texture_get_rd_texture(terrain_tiles.get_rid())
+		if not height_rid.is_valid() or not tiles_rid.is_valid():
+			return
 	if rd == null:
 		_setup()
 	var buffers := render_data.get_render_scene_buffers() as RenderSceneBuffersRD
@@ -90,6 +102,7 @@ func _render_callback(_stage: int, render_data: RenderData) -> void:
 		_binding(2, sampled, [linear, obstacle.texture_rd_rid]), _binding(3, sampled, [linear, coordinates.texture_rd_rid]),
 		_binding(4, sampled, [repeat_linear, detail]), _binding(5, storage, [scatter]),
 		_binding(6, RenderingDevice.UNIFORM_TYPE_UNIFORM_BUFFER, [params]),
+		_binding(7, sampled, [linear, height_rid]), _binding(8, sampled, [linear, tiles_rid]),
 	])
 	var compose_set := UniformSetCacheRD.get_cache(shaders[1], 0, [
 		_binding(0, sampled, [linear, depth]), _binding(1, sampled, [linear, scatter]), _binding(2, storage, [color]),
@@ -115,3 +128,5 @@ func release() -> void:
 	obstacle = null
 	coordinates = null
 	noise = null
+	height_map = null
+	terrain_tiles = null

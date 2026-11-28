@@ -1,5 +1,5 @@
 extends SceneTree
-## Verifies shared height sampling, terrain interaction, and both native fog grids.
+## Verifies shared height sampling, terrain interaction, and all four render modes.
 
 const HILL := Vector2(-5.4, -3.2)
 const HOLLOW := Vector2(1.2, 6.3)
@@ -80,19 +80,26 @@ func _run() -> void:
 	field.simulation_enabled = false
 
 	var quality := hud.get_node("%FogQuality") as OptionButton
-	_check(quality.is_item_disabled(FogDemoHUD.FogQuality.THIN_LAYER)
-		and quality.is_item_disabled(FogDemoHUD.FogQuality.HORIZONTAL_SLICES), "terrain disables both flat-only modes")
-	hud.set_fog_quality(FogDemoHUD.FogQuality.THIN_LAYER)
-	_check(quality.selected == FogDemoHUD.FogQuality.HIGH and camera.compositor == null, "unsupported mode stays inactive")
+	var slices: MultiMeshInstance3D = field.get_node("HorizontalSlices")
+	var environment := (demo.get_node("WorldEnvironment") as WorldEnvironment).environment
+	_check(not quality.is_item_disabled(FogDemoHUD.FogQuality.THIN_LAYER)
+		and not quality.is_item_disabled(FogDemoHUD.FogQuality.HORIZONTAL_SLICES), "terrain exposes both custom render modes")
 	hud.hide()
 	demo.set_physics_process(false)
 	demo.get_node("MouseBrush").hide()
 	field.settings.density_variation = 0.0
 	field.reset_simulation()
 	await _frames(4)
+	(demo.get_node("Obstacles/MovingWall/AnimationPlayer") as AnimationPlayer).pause()
 	var density := field.settings.density
-	for mode in [FogDemoHUD.FogQuality.HIGH, FogDemoHUD.FogQuality.PERFORMANCE]:
+	var material_history := field.get_coordinate_texture().get_image().get_data()
+	for mode in [FogDemoHUD.FogQuality.HIGH, FogDemoHUD.FogQuality.PERFORMANCE,
+			FogDemoHUD.FogQuality.THIN_LAYER, FogDemoHUD.FogQuality.HORIZONTAL_SLICES]:
 		hud.set_fog_quality(mode)
+		var thin: bool = mode == FogDemoHUD.FogQuality.THIN_LAYER
+		var tiled: bool = mode == FogDemoHUD.FogQuality.HORIZONTAL_SLICES
+		_check((camera.compositor != null) == thin and slices.visible == tiled
+			and environment.volumetric_fog_enabled == (not thin and not tiled), "mode %d only activates its own renderer" % mode)
 		field.settings.density = 0.0
 		await _frames(16)
 		var clear := root.get_texture().get_image()
@@ -104,8 +111,61 @@ func _run() -> void:
 		var hollow_delta := _patch_difference(fog, clear, camera.unproject_position(hollow) * scale)
 		_check(quality.selected == mode and hill_delta > 0.025 and hollow_delta > 0.025,
 			"mode %d renders fog on both the hill (%.3f) and hollow (%.3f)" % [mode, hill_delta, hollow_delta])
+		_check(_patch_difference(fog, clear, Vector2(12.0, 12.0)) < 0.005, "mode %d keeps fog inside the field" % mode)
 		if "--capture" in OS.get_cmdline_user_args():
 			fog.save_png("res://.godot/terrain-fog-%d.png" % mode)
+	_check(slices.multimesh == null and slices.get_child_count() > 1, "terrain slices use subdivided tiles")
+	_check(field.get_coordinate_texture().get_image().get_data() == material_history,
+		"switching all render modes preserves the paused fog history")
+
+	# This opaque surface is close to the wide camera, well before the fog.
+	var occluder := MeshInstance3D.new()
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.25, 0.25)
+	var opaque := StandardMaterial3D.new()
+	opaque.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	opaque.albedo_color = Color(0.35, 0.35, 0.35)
+	occluder.mesh = quad
+	occluder.material_override = opaque
+	occluder.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	camera.add_child(occluder)
+	occluder.position.z = -0.5
+	for mode in [FogDemoHUD.FogQuality.THIN_LAYER, FogDemoHUD.FogQuality.HORIZONTAL_SLICES]:
+		hud.set_fog_quality(mode)
+		field.settings.density = 0.0
+		await _frames(8)
+		var clear := root.get_texture().get_image()
+		field.settings.density = density
+		await _frames(8)
+		var fog := root.get_texture().get_image()
+		var center := Vector2(fog.get_size()) * 0.5
+		_check(_patch_difference(fog, clear, center) < 0.004, "mode %d keeps fog behind foreground geometry" % mode)
+	occluder.queue_free()
+
+	var rig := demo.get_node("CameraRig") as FogDemoOrbitCamera
+	rig.set_process(false)
+	var eye := Vector3(1.2, 0.0, 8.2)
+	eye.y = field.get_ground_height(eye) + 0.26
+	camera.global_position = eye
+	var target := Vector3(1.75, 0.0, 5.1)
+	target.y = field.get_ground_height(target) + 0.12
+	camera.look_at(target)
+	for mode in [FogDemoHUD.FogQuality.THIN_LAYER, FogDemoHUD.FogQuality.HORIZONTAL_SLICES]:
+		hud.set_fog_quality(mode)
+		field.settings.density = 0.0
+		await _frames(8)
+		var clear := root.get_texture().get_image()
+		field.settings.density = density
+		await _frames(8)
+		var fog := root.get_texture().get_image()
+		var scale := Vector2(fog.get_size()) / root.get_visible_rect().size
+		var delta := _patch_difference(fog, clear, camera.unproject_position(target) * scale)
+		_check(delta > 0.025, "mode %d resolves fog with the camera inside the shallow layer (%.3f)" % [mode, delta])
+		if "--capture" in OS.get_cmdline_user_args():
+			fog.save_png("res://.godot/terrain-low-%d.png" % mode)
+	hud.set_fog_quality(FogDemoHUD.FogQuality.HIGH)
+	_check(environment.volumetric_fog_enabled and camera.compositor == null and not slices.visible,
+		"returning to native fog restores the terrain renderer")
 	demo.queue_free()
 	await _frames(4)
 	print("TERRAIN_FOG_RESULT failures=%d" % _failures)

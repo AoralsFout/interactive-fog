@@ -51,12 +51,18 @@ func _process(_delta: float) -> void:
 	var s := field.settings
 	var env := world.environment
 	var origin := field.global_position
+	var terrain := field.get_render_height_map()
+	var bounds := terrain.world_bounds if terrain != null else Rect2()
+	var height_texture := terrain.get_height_texture() if terrain != null else null
+	var tile_texture := terrain.get_tile_height_texture() if terrain != null else null
+	var density := s.density if field.height_map == null or terrain != null else 0.0
+	var half_height := volume.size.y * 0.5
 	var ambient := env.ambient_light_color.srgb_to_linear() * env.ambient_light_energy * env.volumetric_fog_ambient_inject
 	var albedo := s.albedo.srgb_to_linear()
 	var emission := s.emission.srgb_to_linear()
 	var vectors: Array[Vector4] = [
 		Vector4(origin.x, origin.y, origin.z, s.thickness),
-		Vector4(s.area_size.x, s.area_size.y, s.density, s.height_falloff),
+		Vector4(s.area_size.x, s.area_size.y, density, s.height_falloff),
 		Vector4(s.edge_fade, maxf(s.obstacle_fade, s.area_size[s.area_size.max_axis_index()] / s.resolution), s.detail_scale, s.detail_amount),
 		Vector4(s.detail_sharpness, s.detail_warp, field.get_simulation_time() / s.detail_reset_period, env.volumetric_fog_anisotropy),
 		Vector4(albedo.r, albedo.g, albedo.b, 0),
@@ -67,11 +73,13 @@ func _process(_delta: float) -> void:
 		_vec(-warm.global_basis.z.normalized(), cos(deg_to_rad(warm.spot_angle))),
 		_vec(cool.global_position, cool.omni_range), _light(cool),
 		Vector4(warm.spot_attenuation, cool.omni_attenuation, warm.spot_angle_attenuation, 0),
+		Vector4(bounds.position.x, bounds.position.y, bounds.size.x, bounds.size.y),
+		Vector4(volume.global_position.y - half_height, volume.global_position.y + half_height, float(terrain != null), 0.0),
 	]
 	var params := PackedVector4Array(vectors).to_byte_array()
 	var detail: Texture3D = volume.material.get_shader_parameter("detail_texture")
 	RenderingServer.call_on_render_thread(effect.set_field.bind(params, field.get_state_texture(),
-			field.get_obstacle_texture(), field.get_coordinate_texture(), detail))
+			field.get_obstacle_texture(), field.get_coordinate_texture(), detail, height_texture, tile_texture))
 
 
 func _vec(v: Vector3, w: float) -> Vector4:

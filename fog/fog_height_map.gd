@@ -24,12 +24,14 @@ extends Resource
 var _needs_samples := true
 var _samples: Image
 var _texture: ImageTexture
+var _tile_texture: ImageTexture
 
 
 func _invalidate_samples() -> void:
 	_needs_samples = true
 	_samples = null
 	_texture = null
+	_tile_texture = null
 	emit_changed()
 
 
@@ -66,6 +68,27 @@ func get_height_texture() -> Texture2D:
 	return _texture
 
 
+## Conservative min/max heights for a uniform XZ grid used by the thin renderer.
+func get_tile_height_texture() -> Texture2D:
+	var samples := get_samples()
+	if samples == null:
+		return null
+	if _tile_texture != null:
+		return _tile_texture
+	var last := samples.get_size() - Vector2i.ONE
+	var tiles := Vector2i((Vector2(last) / 8.0).ceil()).clamp(Vector2i.ONE, Vector2i(32, 32))
+	var cells_per_tile := Vector2(last) / Vector2(tiles)
+	var image := Image.create_empty(tiles.x, tiles.y, false, Image.FORMAT_RGF)
+	for z in range(tiles.y):
+		for x in range(tiles.x):
+			var start := Vector2i((Vector2(x, z) * cells_per_tile).floor())
+			var end := Vector2i((Vector2(x + 1, z + 1) * cells_per_tile).ceil()).min(last)
+			var limits := _sample_limits(start, end)
+			image.set_pixel(x, z, Color(limits.x, limits.y, 0.0))
+	_tile_texture = ImageTexture.create_from_image(image)
+	return _tile_texture
+
+
 ## Returns INF outside the map. CPU, terrain triangles and the shader share a diagonal.
 func sample_height(world_xz: Vector2) -> float:
 	if not is_valid() or not world_bounds.encloses(Rect2(world_xz, Vector2.ZERO)):
@@ -90,6 +113,10 @@ func get_height_limits(area: Rect2) -> Vector2:
 	var last := _samples.get_size() - Vector2i.ONE
 	var start := Vector2i(((area.position - world_bounds.position) / world_bounds.size * Vector2(last)).floor()).clamp(Vector2i.ZERO, last)
 	var end := Vector2i(((area.end - world_bounds.position) / world_bounds.size * Vector2(last)).ceil()).clamp(Vector2i.ZERO, last)
+	return _sample_limits(start, end)
+
+
+func _sample_limits(start: Vector2i, end: Vector2i) -> Vector2:
 	var limits := Vector2(INF, -INF)
 	for z in range(start.y, end.y + 1):
 		for x in range(start.x, end.x + 1):

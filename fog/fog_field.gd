@@ -333,6 +333,10 @@ func get_ground_height(world_position: Vector3) -> float:
 	return height_map.sample_height(Vector2(world_position.x, world_position.z))
 
 
+func get_render_height_map() -> FogHeightMap:
+	return height_map if _get_height_map_warning().is_empty() else null
+
+
 ## Vertical bounds relative to this node, for the volume and its editor gizmo.
 func get_volume_y_bounds() -> Vector2:
 	var thickness := settings.get_volume_height()
@@ -370,11 +374,11 @@ func _apply_appearance() -> void:
 
 
 func apply_render_parameters(material: ShaderMaterial) -> void:
-	var valid_height_map := height_map != null and _height_map_warning.is_empty()
+	var terrain := get_render_height_map()
 	var values := {
 		"area_size": settings.area_size, "world_origin": global_position,
 		"thickness": settings.thickness, "density": settings.density if _height_map_warning.is_empty() else 0.0,
-		"use_height_map": valid_height_map,
+		"use_height_map": terrain != null,
 		"fog_albedo": settings.albedo, "fog_emission": settings.emission,
 		"height_falloff": settings.height_falloff, "edge_fade": settings.edge_fade,
 		"obstacle_fade": maxf(settings.obstacle_fade, settings.area_size[settings.area_size.max_axis_index()] / settings.resolution),
@@ -384,10 +388,10 @@ func apply_render_parameters(material: ShaderMaterial) -> void:
 	}
 	for key in values:
 		material.set_shader_parameter(key, values[key])
-	if valid_height_map:
-		var rect := height_map.world_bounds
+	if terrain != null:
+		var rect := terrain.world_bounds
 		material.set_shader_parameter("height_map_rect", Vector4(rect.position.x, rect.position.y, rect.size.x, rect.size.y))
-		material.set_shader_parameter("height_map_texture", height_map.get_height_texture())
+		material.set_shader_parameter("height_map_texture", terrain.get_height_texture())
 
 
 func _on_settings_changed() -> void:
