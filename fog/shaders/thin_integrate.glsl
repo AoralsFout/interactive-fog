@@ -98,10 +98,14 @@ float extinction(vec3 p) {
 	return f.area_density_falloff.z * mask * shaped * vertical * mix(1.0,mix(0.55,1.25,noise),f.fades_scale_amount.w);
 }
 
-float terrain_integral(vec3 origin, vec3 ray, float enter, float leave, out float light_t) {
+const int LIGHT_SEGMENTS = 4;
+const float MIN_TRANSMITTANCE = 0.005;
+
+void terrain_integral(vec3 origin, vec3 ray, float enter, float leave, out vec2 segments[LIGHT_SEGMENTS]) {
 	TileRay tiles = begin_tiles(origin,ray,enter);
-	float tau = 0.0, peak = 0.0;
-	light_t = enter;
+	float ray_start = enter;
+	float segments_per_meter = float(LIGHT_SEGMENTS)/(leave-enter);
+	for (int i=0; i<LIGHT_SEGMENTS; ++i) segments[i] = vec2(0);
 	// At most 32 + 32 tile columns and rows are crossed by one ray.
 	for (int tile=0; tile<64; ++tile) {
 		float edge = min(leave,min(tiles.next.x,tiles.next.y));
@@ -114,14 +118,13 @@ float terrain_integral(vec3 origin, vec3 ray, float enter, float leave, out floa
 			for (int i=0; i<steps; ++i) {
 				float t = first+(float(i)+0.5)*ds;
 				float amount = extinction(origin+ray*t)*ds;
-				if (amount>peak) { peak=amount; light_t=t; }
-				tau += amount;
+				int segment = min(int((t-ray_start)*segments_per_meter),LIGHT_SEGMENTS-1);
+				segments[segment] += vec2(amount,amount*t);
 			}
 		}
 		if (!advance_tile(tiles,edge,leave)) break;
 		enter = max(enter,edge);
 	}
-	return tau;
 }
 
 bool terrain_blocks_light(vec3 p, vec3 dir, float reach) {
@@ -187,6 +190,57 @@ vec3 local_light(vec3 p, vec3 ray, vec4 pos, vec4 energy, float falloff, bool is
 	return energy.rgb * (3.14159*weight*phase(dir,ray));
 }
 
+vec3 direct_light(vec3 p, vec3 ray, vec3 sun) {
+	vec3 light = sun * (f.sun_dir.w>0 ? visibility(p,f.sun_dir.xyz,50) : 1);
+	light += local_light(p,ray,f.spot_pos,f.spotlight,f.attenuation.x,true);
+	light += local_light(p,ray,f.omni_pos,f.omnilight,f.attenuation.y,false);
+	return light;
+}
+
+struct Scattering {
+	vec3 direct;
+	float transmittance;
+};
+
+void scatter_segment(vec2 integral, vec3 origin, vec3 ray, vec3 sun, inout Scattering fog) {
+	if (integral.x <= 0.0) return;
+	// Shade at the extinction-weighted center of this part of the ray.
+	vec3 p = origin+ray*(integral.y/integral.x);
+	float transmission = exp(-integral.x);
+	fog.direct += fog.transmittance*(1.0-transmission)*direct_light(p,ray,sun);
+	fog.transmittance *= transmission;
+}
+
+Scattering integrate_flat(vec3 origin, vec3 ray, float enter, float leave, vec3 sun, ivec2 px) {
+	float distance_in_fog = leave-enter;
+	// Preserve the original sampling on paths up to 4 m and lift the cap on longer paths.
+	int steps = int(clamp(ceil(distance_in_fog/0.25),4.0,48.0));
+	float ds = distance_in_fog/float(steps);
+	float offset = 0.5;
+	if (distance_in_fog>4.0) {
+		// A stable per-pixel offset breaks up bands from neighboring rays marching in lockstep.
+		uint seed = uint(px.x)+65537u*uint(px.y);
+		uint state = seed*747796405u+2891336453u;
+		uint bits = ((state >> ((state >> 28u)+4u)) ^ state)*277803737u;
+		float noise = float((bits >> 22u) ^ bits)*(1.0/4294967296.0);
+		offset += (noise-0.5)*0.88*smoothstep(4.0,6.0,distance_in_fog);
+	}
+	Scattering fog = Scattering(vec3(0),1.0);
+	for (int segment=0; segment<LIGHT_SEGMENTS; ++segment) {
+		int first = segment*steps/LIGHT_SEGMENTS;
+		int end = (segment+1)*steps/LIGHT_SEGMENTS;
+		vec2 integral = vec2(0);
+		for (int i=first; i<end; ++i) {
+			float t = enter+(float(i)+offset)*ds;
+			float amount = extinction(origin+ray*t)*ds;
+			integral += vec2(amount,amount*t);
+		}
+		scatter_segment(integral,origin,ray,sun,fog);
+		if (fog.transmittance<MIN_TRANSMITTANCE) break;
+	}
+	return fog;
+}
+
 void main() {
 	ivec2 px = ivec2(gl_GlobalInvocationID.xy);
 	if (any(greaterThanEqual(px,imageSize(scatter)))) return;
@@ -208,24 +262,21 @@ void main() {
 	float leave = min(length(end_pos-cam.eye.xyz),min(hi.x,min(hi.y,hi.z)));
 	vec4 result = vec4(0);
 	if (leave>enter && f.area_density_falloff.z>0.0) {
-		float tau = 0;
-		float light_t = mix(enter,leave,0.65);
+		vec3 sun = f.sunlight.rgb*phase(f.sun_dir.xyz,ray);
+		Scattering fog = Scattering(vec3(0),1.0);
 		if (has_terrain()) {
-			tau = terrain_integral(cam.eye.xyz,ray,enter,leave,light_t);
+			vec2 segments[LIGHT_SEGMENTS];
+			terrain_integral(cam.eye.xyz,ray,enter,leave,segments);
+			for (int i=0; i<LIGHT_SEGMENTS; ++i) {
+				scatter_segment(segments[i],cam.eye.xyz,ray,sun,fog);
+				if (fog.transmittance<MIN_TRANSMITTANCE) break;
+			}
 		} else {
-			int steps = int(clamp(ceil((leave-enter)/0.25),4,16));
-			float ds = (leave-enter)/steps;
-			for (int i=0; i<steps; ++i) tau += extinction(cam.eye.xyz+ray*(enter+(i+0.5)*ds))*ds;
+			fog = integrate_flat(cam.eye.xyz,ray,enter,leave,sun,px);
 		}
-		if (tau>0.0) {
-			float alpha = 1-exp(-tau);
-			vec3 p = cam.eye.xyz+ray*light_t;
-			vec3 light = f.ambient.rgb + f.sunlight.rgb * phase(f.sun_dir.xyz,ray) *
-				(f.sun_dir.w>0 ? visibility(p,f.sun_dir.xyz,50) : 1);
-			light += local_light(p,ray,f.spot_pos,f.spotlight,f.attenuation.x,true);
-			light += local_light(p,ray,f.omni_pos,f.omnilight,f.attenuation.y,false);
-			result = vec4((light*f.albedo.rgb+f.emission.rgb)*alpha, alpha);
-		}
+		float alpha = 1.0-fog.transmittance;
+		vec3 color = (fog.direct+f.ambient.rgb*alpha)*f.albedo.rgb+f.emission.rgb*alpha;
+		result = vec4(color,alpha);
 	}
 	imageStore(scatter,px,result);
 }
